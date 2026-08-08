@@ -102,7 +102,7 @@
     - name: show discovered ami-id
       ansible.builtin.debug:
         msg: "Discovered AMI ID {{ (ami_info.images | sort(attribute='creation_date') | last).image_id }} for RHEL 10 in region {{ region }}"
-        when: ami_info.images | length > 0
+      when: ami_info.images | length > 0
   
     - name: launch an EC2 instance
       amazon.aws.ec2_instance:
