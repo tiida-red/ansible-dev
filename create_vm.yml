@@ -91,16 +91,17 @@
     - name: discover ami-id from os type and version
       amazon.aws.ec2_ami_info:
         region: "{{ region }}"
-        owners: "309956199498"
+        owners: "amazon"
+#        owners: "309956199498" ## Red Hat, Inc. (RHEL) owner ID
         filters:
-          name: "RHEL-10*"
+          name: "Red Hat Enterprise Linux 10 (HVM), SSD Volume Type*"
           architecture: "x86_64"
           state: "available"
       register: ami_info
     
     - name: show discovered ami-id
       ansible.builtin.debug:
-        msg: "Discovered AMI ID: {{ ami_info.images[0].image_id }} for RHEL 10 in region {{ region }}"
+        msg: "Discovered AMI ID: {{ ami_info.images[0].image_id }} for RHEL 10 in region {{ region }} "
         when: ami_info.images | length > 0
   
     - name: launch an EC2 instance
