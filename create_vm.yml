@@ -5,7 +5,7 @@
   collections:
     - amazon.aws
   vars:
-    region:  "{{ region }}"
+    region:  ap-northeast-1
     instance_name: rhel10-demo
     hostname: "{{ instance_name }}"
     instance_type: t3.micro
