@@ -18,7 +18,7 @@
         region: ap-northeast-1
         tags:
           module: ec2_vpc_public_subnet
-        register: public_subnet
+      register: public_subnet
     - name: Create a new subnet using net-name
       amazon.aws.ec2_vpc_subnet:
         state: present
