@@ -96,6 +96,17 @@
         region: "{{ region }}"
         vpc_subnet_id: "{{ existing_subnet_id }}"
         security_group: "{{ security_group.group_id }}"
+        tags:
+          Name: "{{ instance_name }}"
+        user_data: |
+          #cloud-config
+          write_files:
+            - path: /etc/hostname
+              content: |
+                {{ instance_name }}
+              permissions: '0644'
+          runcmd:
+            - hostnamectl set-hostname {{ instance_name }}
         volumes:
           - device_name: /dev/sda1
             ebs:
