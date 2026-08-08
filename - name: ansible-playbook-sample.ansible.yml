@@ -32,7 +32,7 @@
         tags:
           Name: Module dev2 gateway
         state: present
-      register:IGW
+      register: IGW
 #    - name: Create a new NAT Gateway attached to the VPC
 #      amazon.aws.ec2_vpc_nat_gateway:
 #        state: present
