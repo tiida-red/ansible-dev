@@ -13,26 +13,16 @@
     public_key: "public_key"
 
   tasks:
-    - name: ローカルのSSH公開鍵の存在チェック
-      ansible.builtin.stat:
-        path: "{{ public_key_path | expanduser }}"
-      register: key_file
-
-    - name: 公開鍵が存在しない場合にエラー終了
-      ansible.builtin.fail:
-        msg: "公開鍵ファイル '{{ public_key_path }}' が見つかりません。ssh-keygen等で作成してください。"
-      when: not key_file.stat.exists
-
-    - name: EC2キーペアをAWSに登録
+　　- name: 変数で指定された公開鍵をAWSに登録
       amazon.aws.ec2_key:
         name: "{{ key_name }}"
-        key_material: "{{ lookup('file', public_key_path | expanduser) }}"
+        key_material: "{{ public_key }}"
         region: "{{ aws_region }}"
         state: present
       register: ec2_key_result
 
-    - name: 登録結果の出力
+    - name: 登録結果の確認
       ansible.builtin.debug:
         msg:
-          - "キーペア名: {{ ec2_key_result.key.name }}"
-          - "フィンガープリント: {{ ec2_key_result.key.fingerprint }}"
+          - "キーペア '{{ ec2_key_result.key.name }}' の登録完了"
+          - "AWS上のフィンガープリント: {{ ec2_key_result.key.fingerprint }}"
