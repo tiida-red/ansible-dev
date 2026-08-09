@@ -11,7 +11,7 @@
     # --------------------------------------------------
     # 1. NameタグからターゲットEC2インスタンス情報を取得
     # --------------------------------------------------
-    - name: EC2インスタンスの情報を取得
+    - name: get EC2 instance info by Name tag
       amazon.aws.ec2_instance_info:
         region: "{{ region }}"
         filters:
