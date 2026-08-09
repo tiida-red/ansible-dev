@@ -74,7 +74,7 @@
     # --------------------------------------------------
     # 4. ec2-user の SSH 公開鍵を取得・コピー
     # --------------------------------------------------
-    - name: 元ユーザー ({{ source_ssh_user }}) の authorized_keys から公開鍵を取得
+    - name: 元ユーザー "({{ source_ssh_user }})" の authorized_keys から公開鍵を取得
       ansible.builtin.slurp:
         src: "/home/{{ source_ssh_user }}/.ssh/authorized_keys"
       register: source_authorized_keys
