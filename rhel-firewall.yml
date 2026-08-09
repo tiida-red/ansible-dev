@@ -1,0 +1,89 @@
+---
+- name: 対象インスタンスの特定と動的インベントリ追加
+  hosts: localhost
+  gather_facts: false
+  vars:
+    target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
+    region: "ap-northeast-1"
+
+  tasks:
+    - name: ホスト名(Nameタグ)からEC2インスタンス情報を取得
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+          "instance-state-name": "running"
+      register: ec2_info
+
+    - name: インスタンスが見つかったか確認
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length > 0
+        fail_msg: "指定されたホスト名 '{{ target_hostname }}' の実行中インスタンスが見つかりません。"
+
+    - name: ターゲットホストを動的インベントリに追加
+      ansible.builtin.add_host:
+        name: "{{ ec2_info.instances[0].public_ip_address }}" # または private_ip_address
+        groups: target_rhel_servers
+        ansible_user: ec2-user # 必要に応じて ec2-user や root に変更してください
+
+
+- name: RHEL の Firewall 設定および OS パッチ適用
+  hosts: target_rhel_servers
+  become: true # root 権限で実行
+  gather_facts: true
+
+  tasks:
+    # --------------------------------------------------
+    # 1. OS パッチの最新化
+    # --------------------------------------------------
+    - name: すべてのパッケージを最新化 (OSパッチ適用)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+
+    # --------------------------------------------------
+    # 2. firewalld サービスの有効化と起動
+    # --------------------------------------------------
+    - name: firewalld パッケージのインストール確認
+      ansible.builtin.dnf:
+        name: firewalld
+        state: present
+
+    - name: firewalld サービスの起動と自動起動設定
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    # --------------------------------------------------
+    # 3. Firewall ルールの設定 (http, https, ping, postgresql, 8080, 8443)
+    # --------------------------------------------------
+    - name: サービス名指定でポートを許可 (http, https, postgresql)
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - http
+        - https
+        - postgresql
+
+    - name: ポート番号指定で許可 (8080/tcp, 8443/tcp)
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - 8080/tcp
+        - 8443/tcp
+
+    - name: ping (ICMP) を許可
+      ansible.posix.firewalld:
+        icmp_element: echo-request
+        permanent: true
+        state: enabled
+        immediate: true
