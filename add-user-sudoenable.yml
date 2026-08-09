@@ -41,7 +41,7 @@
     hosts: target_rhel_servers
     become: true # root 権限で実行
     gather_facts: true
-    
+
     - name: ユーザー作成
       ansible.builtin.user:
         name: "{{ new_username }}"
@@ -68,8 +68,6 @@
         group: root
         mode: "0440"
         validate: "/usr/sbin/visudo -cf %s" # 構文チェックを実施して壊れた設定を未然に防止
-      become: true  # ★ タスク単位で指定
-
 
     # --------------------------------------------------
     # 4. ec2-user の SSH 公開鍵を取得・コピー
