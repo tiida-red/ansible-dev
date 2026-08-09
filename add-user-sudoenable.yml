@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    region: "ap-northeast-1"
     # 対象のインスタンス名（Nameタグ）を指定
     target_hostname: "my-rhel-server" 
     # デフォルトのユーザー名（実行時に -e new_username=xxx で上書き可能）
