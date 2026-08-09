@@ -13,7 +13,7 @@
     public_key: "public_key"
 
   tasks:
-　　- name: 変数で指定された公開鍵をAWSに登録
+    - name: 変数で指定された公開鍵をAWSに登録
       amazon.aws.ec2_key:
         name: "{{ key_name }}"
         key_material: "{{ public_key }}"
