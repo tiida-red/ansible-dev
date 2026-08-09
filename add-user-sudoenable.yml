@@ -44,6 +44,10 @@
     # --------------------------------------------------
     # 2. ユーザーの作成
     # --------------------------------------------------
+    - name: 変数確認
+      ansible.builtin.debug:
+        msg: "新規ユーザー名: {{ new_username }}, 公開鍵コピー元ユーザー: {{ source_ssh_user }}"  
+    
     - name: ユーザー作成
       ansible.builtin.user:
         name: "{{ new_username }}"
