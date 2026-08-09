@@ -80,10 +80,3 @@
       loop:
         - 8080/tcp
         - 8443/tcp
-
-    - name: ping (ICMP) を許可
-      ansible.posix.firewalld:
-        icmp_element: echo-request
-        permanent: true
-        state: enabled
-        immediate: true
