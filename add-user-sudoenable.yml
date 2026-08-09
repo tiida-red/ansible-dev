@@ -38,11 +38,11 @@
     # --------------------------------------------------
     # 2. ユーザーの作成
     # --------------------------------------------------
-    hosts: target_rhel_servers
-    become: true # root 権限で実行
-    gather_facts: true
+- name: ユーザー作成
+  hosts: target_rhel_servers
+  become: true # root 権限で実行
+  gather_facts: true
 
-    tags:
     - name: ユーザー作成
       ansible.builtin.user:
         name: "{{ new_username }}"
