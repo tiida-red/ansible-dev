@@ -1,3 +1,17 @@
+
+Playbook Parameters
+
+upload-key-pair.yml
+  vars:
+    # 登録するキーペアの名前
+    key_name: "my-ec2-keypair"
+    # 対象のAWSリージョン
+    aws_region: "ap-northeast-1"
+    # ローカルのSSH公開鍵ファイルのパス
+    public_key: "public_key"
+
+ansible-playbook upload-key-pair.yml -e 'key_name=<keyname> public_key="<public key content>"'
+
 create_vm.yml
   vars:
     region:  ap-northeast-1

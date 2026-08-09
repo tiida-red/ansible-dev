@@ -57,6 +57,15 @@
         state: started
         enabled: true
 
+    # 【重要】firewalld サービスが完全に応答可能になるまで待機
+    - name: firewalld が完全起動して応答するまで待機
+      ansible.builtin.command: firewall-cmd --state
+      register: firewall_state
+      until: firewall_state.stdout == "running"
+      retries: 5
+      delay: 2
+      changed_when: false
+
     # --------------------------------------------------
     # 3. Firewall ルールの設定 (http, https, ping, postgresql, 8080, 8443)
     # --------------------------------------------------
