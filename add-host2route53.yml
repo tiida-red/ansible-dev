@@ -18,6 +18,8 @@
           "tag:Name": "{{ target_hostname }}"
           "instance-state-name": "running"
       register: ec2_info
+      debug:
+        msg: "EC2インスタンス情報: {{ ec2_info.instances }}"
 
     - name: インスタンスが存在するか確認
       ansible.builtin.assert:
@@ -27,7 +29,7 @@
 
     - name: 検出されたIPアドレスを変数にセット
       ansible.builtin.set_fact:
-        target_ip: "{{ ec2_info.instances[0].public_ip_address }}" # プライベートIPの場合は private_ip_address に変更
+        target_ip: "{{ ec2_info.instances[0].private_ip_address }}" # プライベートIPの場合は private_ip_address に変更
 
     # --------------------------------------------------
     # 2. Route 53 ホストゾーンの存在確認
