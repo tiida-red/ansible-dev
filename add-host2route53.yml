@@ -18,7 +18,9 @@
           "tag:Name": "{{ target_hostname }}"
           "instance-state-name": "running"
       register: ec2_info
-      debug:
+    
+    - name: show EC2 instance info for debugging
+      ansible.builtin.debug:
         msg: "EC2インスタンス情報: {{ ec2_info.instances }}"
 
     - name: インスタンスが存在するか確認
