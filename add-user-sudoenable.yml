@@ -48,6 +48,14 @@
     # --------------------------------------------------
     # 3. パスワードなし sudo の設定 (sudoers)
     # --------------------------------------------------
+    - name: /etc/sudoers.d ディレクトリが存在することを確認・作成
+      ansible.builtin.file:
+        path: /etc/sudoers.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+        
     - name: /etc/sudoers.d にパスワードなし sudo 設定を追加
       ansible.builtin.copy:
         content: "{{ new_username }} ALL=(ALL) NOPASSWD:ALL\n"
