@@ -42,6 +42,7 @@
     become: true # root 権限で実行
     gather_facts: true
 
+    tags:
     - name: ユーザー作成
       ansible.builtin.user:
         name: "{{ new_username }}"
