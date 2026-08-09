@@ -1,0 +1,61 @@
+---
+- name: EC2ホストを検出してRoute 53へAレコード登録
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server"    # 検出対象のEC2インスタンス名（Nameタグ）
+    hosted_zone_name: "example.com"       # Route 53のパブリック/プライベートホストゾーン名
+
+  tasks:
+    # --------------------------------------------------
+    # 1. NameタグからターゲットEC2インスタンス情報を取得
+    # --------------------------------------------------
+    - name: EC2インスタンスの情報を取得
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+          "instance-state-name": "running"
+      register: ec2_info
+
+    - name: インスタンスが存在するか確認
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length > 0
+        fail_msg: "指定された Name タグ '{{ target_hostname }}' の実行中インスタンスが見つかりません。"
+
+    - name: 検出されたIPアドレスを変数にセット
+      ansible.builtin.set_fact:
+        target_ip: "{{ ec2_info.instances[0].public_ip_address }}" # プライベートIPの場合は private_ip_address に変更
+
+    # --------------------------------------------------
+    # 2. Route 53 ホストゾーンの存在確認
+    # --------------------------------------------------
+    - name: Route 53 ホストゾーン情報の取得
+      amazon.aws.route53_zone:
+        zone: "{{ hosted_zone_name }}"
+      register: zone_info
+
+    # --------------------------------------------------
+    # 3. Route 53 に A レコードを登録・更新
+    # --------------------------------------------------
+    - name: Route 53 Aレコードの登録・更新
+      amazon.aws.route53:
+        state: present
+        zone: "{{ hosted_zone_name }}"
+        record: "{{ target_hostname }}.{{ hosted_zone_name }}"
+        type: A
+        ttl: 300
+        value: "{{ target_ip }}"
+        overwrite: same  # ★ 既存レコードのIPと異なる場合のみ上書き（同一IPなら変更なし）
+      register: route53_result
+
+    - name: 実行結果の確認
+      ansible.builtin.debug:
+        msg: >-
+          {% if route53_result.changed %}
+          レコード {{ target_hostname }}.{{ hosted_zone_name }} を IP: {{ target_ip }} で更新・作成しました。
+          {% else %}
+          レコード {{ target_hostname }}.{{ hosted_zone_name }} はすでに最新の IP ({{ target_ip }}) で登録されています。
+          {% endif %}
