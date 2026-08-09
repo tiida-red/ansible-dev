@@ -35,14 +35,15 @@
         groups: target_rhel_servers
         ansible_user: ec2-user # 必要に応じて ec2-user や root に変更してください
 
-    # --------------------------------------------------
-    # 2. ユーザーの作成
-    # --------------------------------------------------
 - name: ユーザー作成
   hosts: target_rhel_servers
   become: true # root 権限で実行
   gather_facts: true
 
+  tasks:
+    # --------------------------------------------------
+    # 2. ユーザーの作成
+    # --------------------------------------------------
     - name: ユーザー作成
       ansible.builtin.user:
         name: "{{ new_username }}"
