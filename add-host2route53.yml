@@ -37,7 +37,7 @@
     - name: Route 53 ホストゾーン情報の取得
       amazon.aws.route53_zone:
         zone: "{{ hosted_zone_name }}"
-      register: zone_info
+      register: zone_info1
 
     # --------------------------------------------------
     # 3. Route 53 に A レコードを登録・更新
@@ -50,7 +50,7 @@
         type: A
         ttl: 300
         value: "{{ target_ip }}"
-        overwrite: same  # ★ 既存レコードのIPと異なる場合のみ上書き（同一IPなら変更なし）
+        overwrite: true  # ★ 既存レコードのIPと異なる場合のみ上書き（同一IPなら変更なし）
       register: route53_result
 
     - name: 実行結果の確認
