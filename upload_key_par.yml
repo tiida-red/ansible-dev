@@ -1,0 +1,38 @@
+---
+- name: AWS EC2 Key Pair 登録 Playbook
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # 登録するキーペアの名前
+    key_name: "my-ec2-keypair"
+    # 対象のAWSリージョン
+    aws_region: "ap-northeast-1"
+    # ローカルのSSH公開鍵ファイルのパス
+    public_key: "public_key"
+
+  tasks:
+    - name: ローカルのSSH公開鍵の存在チェック
+      ansible.builtin.stat:
+        path: "{{ public_key_path | expanduser }}"
+      register: key_file
+
+    - name: 公開鍵が存在しない場合にエラー終了
+      ansible.builtin.fail:
+        msg: "公開鍵ファイル '{{ public_key_path }}' が見つかりません。ssh-keygen等で作成してください。"
+      when: not key_file.stat.exists
+
+    - name: EC2キーペアをAWSに登録
+      amazon.aws.ec2_key:
+        name: "{{ key_name }}"
+        key_material: "{{ lookup('file', public_key_path | expanduser) }}"
+        region: "{{ aws_region }}"
+        state: present
+      register: ec2_key_result
+
+    - name: 登録結果の出力
+      ansible.builtin.debug:
+        msg:
+          - "キーペア名: {{ ec2_key_result.key.name }}"
+          - "フィンガープリント: {{ ec2_key_result.key.fingerprint }}"
