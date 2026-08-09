@@ -33,7 +33,8 @@
       ansible.builtin.add_host:
         name: "{{ ec2_info.instances[0].public_ip_address }}" # または private_ip_address
         groups: target_rhel_servers
-        ansible_user: ec2-user # 必要に応じて ec2-user や root に変更してください
+        new_username: "{{ new_username }}"
+        source_ssh_user: "{{ source_ssh_user }}"
 
 - name: ユーザー作成
   hosts: target_rhel_servers
