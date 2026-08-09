@@ -1,5 +1,4 @@
 create_vm.yml
-
   vars:
     region:  ap-northeast-1
     instance_name: rhel10-demo
@@ -9,11 +8,24 @@ create_vm.yml
     root_volume_size: 30
     key_name: my-key-pair
 
+ansible-playbook create_vm -e "instance_name=rhel10-demo key_name=my_key"
+
+register.yml
+ vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
+    rhsm_username: "your_rhsm_username" # Red Hat Subscription Manager のユーザー名
+    rhsm_password: "your_rhsm_password" # Red Hat Subscription Manager のパスワード
+
+ansible-playbook register.yml -e "target_hostname=my-rhel-server rhsm_username=<your_rhsm_username> rhsm+password=<your_rhsm_password>
+
+
 rhel-firewall.yml
   vars:
     target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
     region: "ap-northeast-1"
 
+ansible-laybook rhel-fireawll.yml -e "target_hostname=rhel10-demo"
 
 add-host2route54.yml
   vars:
@@ -21,4 +33,13 @@ add-host2route54.yml
     target_hostname: "my-rhel-server"    # 検出対象のEC2インスタンス名（Nameタグ）
     hosted_zone_name: "example.com"       # Route 53のパブリック/プライベートホストゾーン名
 
+ansible-laybook host2route54.yml -e "target_hostname=rhel10-demo hosted_zone_name=xxxx.example.com"
 
+add-user-sudoenable.yml
+ vars:
+    region: "ap-northeast-1"            # 対象のインスタンス名（Nameタグ）を指定
+    target_hostname: "my-rhel-server"   # デフォルトのユーザー名（実行時に -e new_username=xxx で上書き可能）
+    new_username: "developer"           # 公開鍵のコピー元ユーザー（EC2標準の既存ユーザー）
+    source_ssh_user: "ec2-user"
+
+ansible-playbook add-user-sudoenable.yml -e "target_hostname=my-rhel-server new_username=developer"
