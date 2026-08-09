@@ -55,7 +55,7 @@
         owner: root
         group: root
         mode: "0750"
-        
+
     - name: /etc/sudoers.d にパスワードなし sudo 設定を追加
       ansible.builtin.copy:
         content: "{{ new_username }} ALL=(ALL) NOPASSWD:ALL\n"
@@ -63,7 +63,7 @@
         owner: root
         group: root
         mode: "0440"
-        validate: "visudo -cf %s" # 構文チェックを実施して壊れた設定を未然に防止
+        validate: "/usr/sbin/visudo -cf %s" # 構文チェックを実施して壊れた設定を未然に防止
 
     # --------------------------------------------------
     # 4. ec2-user の SSH 公開鍵を取得・コピー
