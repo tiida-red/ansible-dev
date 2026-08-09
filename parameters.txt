@@ -1,0 +1,24 @@
+create_vm.yml
+
+  vars:
+    region:  ap-northeast-1
+    instance_name: rhel10-demo
+    hostname: "{{ instance_name }}" # 対象のホスト名(インスタンス名)を指定
+    instance_type: t3.micro
+    ami_id: ami-0xxxxxxxxxxxxxxxxx
+    root_volume_size: 30
+    key_name: my-key-pair
+
+rhel-firewall.yml
+  vars:
+    target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
+    region: "ap-northeast-1"
+
+
+add-host2route54.yml
+  vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server"    # 検出対象のEC2インスタンス名（Nameタグ）
+    hosted_zone_name: "example.com"       # Route 53のパブリック/プライベートホストゾーン名
+
+

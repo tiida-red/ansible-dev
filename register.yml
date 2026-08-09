@@ -1,0 +1,50 @@
+---
+- name: Register target RHEL server to subscription-manager and enable required repositories
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
+    rhsm_username: "your_rhsm_username" # Red Hat Subscription Manager のユーザー名
+    rhsm_password: "your_rhsm_password" # Red Hat Subscription Manager のパスワード
+
+  tasks:
+    - name: ホスト名(Nameタグ)からEC2インスタンス情報を取得
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+          "instance-state-name": "running"
+      register: ec2_info
+
+    - name: インスタンスが見つかったか確認
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length > 0
+        fail_msg: "指定されたホスト名 '{{ target_hostname }}' の実行中インスタンスが見つかりません。"
+
+    - name: ターゲットホストを動的インベントリに追加
+      ansible.builtin.add_host:
+        name: "{{ ec2_info.instances[0].public_ip_address }}" # または private_ip_address
+        groups: target_rhel_servers
+        ansible_user: ec2-user # 必要に応じて ec2-user や root に変更してください
+
+- name: Register and enable repositories on the target RHEL server
+  hosts: target_rhel_servers
+  become: true # root 権限で実行
+  gather_facts: true
+
+  tasks:
+    - name: Register the system with Red Hat Subscription Manager
+      ansible.builtin.command:
+        cmd: >
+          subscription-manager register
+          --username {{ rhsm_username }}
+          --password {{ rhsm_password }}
+      register: register_result
+      ignore_errors: true
+
+    - name: Show registration result for debugging
+      ansible.builtin.debug:
+        msg: "Registration result: {{ register_result.stdout }}"
+
