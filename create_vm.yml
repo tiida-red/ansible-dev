@@ -120,7 +120,7 @@
     - name: expose the selected subnet details
       ansible.builtin.set_fact:
         existing_subnet_id: "{{ selected_subnet.subnet_id }}"
-        existing_subnet_cidr: "{{ selected_subnet.cidr_block }}"
+        existing_subnet_cidr: "{{ selected_subnet.cidr }}"
 
 
 #    - name: discover existing public subnets in the selected VPC
