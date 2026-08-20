@@ -31,7 +31,7 @@
 
     - name: ターゲットホストを動的インベントリに追加
       ansible.builtin.add_host:
-        name: "{{ ec2_info.instances[0].public_ip_address }}" # または private_ip_address
+        name: "{{ ec2_info.instances[0].private_ip_address }}" # public_ip_address または private_ip_address
         groups: target_rhel_servers
         new_username: "{{ new_username }}"
         source_ssh_user: "{{ source_ssh_user }}"
