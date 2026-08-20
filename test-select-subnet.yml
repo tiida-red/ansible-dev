@@ -51,23 +51,25 @@
       ansible.builtin.set_fact:
         selected_subnets: >-
           {{
-            subnet_list
-            | selectattr('type', 'equalto', subnet_type)
-            | selectattr('az', 'equalto', availability_zone)
+            subnet_info.subnets
+            | selectattr(
+                'availability_zone',
+                'equalto',
+                availability_zone
+              )
+            | selectattr(
+                'tags.Name',
+                'search',
+                '(?i)' + subnet_type
+              )
             | list
           }}
     # ------------------------------------------------------------
-    # 4. Private/Public + AZでSubnetを選択
+    # 4. 選択したSubnetを表示
     # ------------------------------------------------------------
-    - name: Select requested subnet
-      ansible.builtin.set_fact:
-        selected_subnets: >-
-          {{
-            subnet_list
-            | selectattr('name', 'search', '(?i)' + subnet_type)
-            | selectattr('az', 'equalto', availability_zone)
-            | list
-          }}
+    - name: Show selected subnet
+      ansible.builtin.debug:
+        var: selected_subnets
 
     # ------------------------------------------------------------
     # 5. Subnetがない場合
