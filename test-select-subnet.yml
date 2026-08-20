@@ -95,17 +95,18 @@
     # ------------------------------------------------------------
     # 7. Subnet IDを取得
     # ------------------------------------------------------------
-    - name: Set selected subnet ID
+    - name: Set selected subnet
       ansible.builtin.set_fact:
-        selected_subnet_id: "{{ selected_subnets[0].subnet_id }}"
+        selected_subnet:
+          subnet_id: "{{ selected_subnets[0].subnet_id }}"
+          name: "{{ selected_subnets[0].tags.Name }}"
+          type: "{{ subnet_type }}"
+          availability_zone: "{{ selected_subnets[0].availability_zone }}"
+          cidr: "{{ selected_subnets[0].cidr_block }}"
 
     # ------------------------------------------------------------
     # 8. 結果表示
     # ------------------------------------------------------------
     - name: Show selected subnet
       ansible.builtin.debug:
-        msg:
-          subnet_id: "{{ selected_subnet_id }}"
-          name: "{{ selected_subnets[0].tags.Name }}"
-          type: "{{ subnet_type }}"
-          availability_zone: "{{ availability_zone }}"
+        var: selected_subnet
