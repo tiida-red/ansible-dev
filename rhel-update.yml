@@ -1,6 +1,6 @@
 ---
-- name: 対象インスタンスの特定と動的インベントリ追加
-  hosts: {{ target_hostname }}
+- name: "RHEL Update and Reboot Playbook"
+  hosts: "{{ target_hostname }}"
   gather_facts: true
   vars:
     target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
@@ -12,7 +12,7 @@
   tasks:
     - name: Ensure target host is specified or confirmed
       ansible.builtin.debug:
-        msg: "対象ホスト: '{{ inventory_hostname }}' に対してパッケージ更新（dnf update）を開始します。"
+        msg: "対象ホスト: '{{ target_hostname }}' に対してパッケージ更新（dnf update）を開始します。"
     # --------------------------------------------------
     # 1. OS パッチの最新化
     # --------------------------------------------------
