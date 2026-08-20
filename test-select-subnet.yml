@@ -10,7 +10,7 @@
 
     # 検索条件
     subnet_type: private
-    availability_zone: ap-northeast-1a
+    availability_zone: us-east-2a
 
   tasks:
     # ------------------------------------------------------------
@@ -45,6 +45,7 @@
     # ------------------------------------------------------------
     - name: Show subnet list
       ansible.builtin.debug:
+        var: subnet_list
 
     - name: Select requested subnet
       ansible.builtin.set_fact:
