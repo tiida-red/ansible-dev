@@ -6,6 +6,7 @@
     target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
     region: "ap-northeast-1"
 
+
   tasks:
     - name: ホスト名(Nameタグ)からEC2インスタンス情報を取得
       amazon.aws.ec2_instance_info:
@@ -32,6 +33,9 @@
   hosts: target_rhel_servers
   become: true # root 権限で実行
   gather_facts: true
+  vars:
+    reboot_after_patch: true # OSパッチ適用後に再起動するか
+    reboot_timeout: 600
 
   tasks:
     # --------------------------------------------------
@@ -43,8 +47,40 @@
         state: latest
         update_cache: true
 
+    # ============================================================
+    # 2. Reboot必要性確認
+    # ============================================================
+    - name: Check if reboot is required
+      ansible.builtin.command:
+        cmd: needs-restarting -r
+      register: reboot_check
+      changed_when: false
+      failed_when: false
+
+    - name: Set reboot required
+      ansible.builtin.set_fact:
+        reboot_required: "{{ reboot_check.rc != 0 }}"
+
+    - name: Show reboot requirement
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "REBOOT CHECK"
+          - "Host : {{ inventory_hostname }}"
+          - "Reboot Required : {{ reboot_required }}"
+          - "=========================================="
+  
+    - name: Reboot server 
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ reboot_timeout }}"
+        test_command: whoami
+        msg: "Reboot requested by Ansible RHEL patch Playbook"
+      when:
+        - reboot_after_patch | bool
+        - reboot_required | bool
+  
     # --------------------------------------------------
-    # 2. firewalld サービスの有効化と起動
+    # 3. firewalld サービスの有効化と起動
     # --------------------------------------------------
     - name: firewalld パッケージのインストール確認
       ansible.builtin.dnf:
@@ -67,7 +103,7 @@
       changed_when: false
 
     # --------------------------------------------------
-    # 3. Firewall ルールの設定 (http, https, ping, postgresql, 8080, 8443)
+    # 4. Firewall ルールの設定 (http, https, ping, postgresql, 8080, 8443)
     # --------------------------------------------------
     - name: サービス名指定でポートを許可 (http, https, postgresql)
       ansible.posix.firewalld:
