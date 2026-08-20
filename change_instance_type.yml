@@ -1,0 +1,188 @@
+---
+- name: Change EC2 instance type
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    # AWS Region
+    region: "us-east-2"
+
+    # 対象のインスタンス名（Nameタグ）
+    target_hostname: "my-rhel-server"
+
+    # 変更後インスタンスタイプ
+    instance_type: "new-instance-type"
+
+  tasks:
+
+    # ============================================================
+    # 1. 対象EC2インスタンスを検索
+    # ============================================================
+
+    - name: Find EC2 instance by Name tag
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+          instance-state-name:
+            - pending
+            - running
+            - stopping
+            - stopped
+      register: ec2_info
+
+    # ============================================================
+    # 2. 対象インスタンスの存在確認
+    # ============================================================
+
+    - name: Fail if instance was not found
+      ansible.builtin.fail:
+        msg: >-
+          EC2 instance with Name tag
+          '{{ target_hostname }}'
+          was not found in region '{{ region }}'.
+      when: ec2_info.instances | length == 0
+
+    # ============================================================
+    # 3. 同じNameタグのインスタンスが複数ある場合は停止
+    # ============================================================
+
+    - name: Fail if multiple instances were found
+      ansible.builtin.fail:
+        msg: >-
+          Multiple EC2 instances were found with Name tag
+          '{{ target_hostname }}'.
+          Instance IDs:
+          {{
+            ec2_info.instances
+            | map(attribute='instance_id')
+            | list
+          }}
+      when: ec2_info.instances | length > 1
+
+    # ============================================================
+    # 4. 対象インスタンス情報をセット
+    # ============================================================
+
+    - name: Set target instance information
+      ansible.builtin.set_fact:
+        target_instance_id: "{{ ec2_info.instances[0].instance_id }}"
+        current_instance_type: "{{ ec2_info.instances[0].instance_type }}"
+        current_state: "{{ ec2_info.instances[0].state.name }}"
+
+    # ============================================================
+    # 5. 現在の状態を表示
+    # ============================================================
+
+    - name: Show target instance
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "EC2 INSTANCE"
+          - "Name          : {{ target_hostname }}"
+          - "Instance ID   : {{ target_instance_id }}"
+          - "Current Type  : {{ current_instance_type }}"
+          - "Target Type   : {{ instance_type }}"
+          - "Current State : {{ current_state }}"
+          - "Region        : {{ region }}"
+          - "=========================================="
+
+    # ============================================================
+    # 6. すでに指定されたタイプの場合は終了
+    # ============================================================
+
+    - name: Skip if instance type is already correct
+      ansible.builtin.debug:
+        msg: >-
+          Instance {{ target_instance_id }} is already
+          '{{ instance_type }}'. No change is required.
+      when: current_instance_type == instance_type
+
+    # ============================================================
+    # 7. EC2を停止
+    # ============================================================
+
+    - name: Stop EC2 instance
+      amazon.aws.ec2_instance:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instance_id }}"
+        state: stopped
+        wait: true
+      when: current_instance_type != instance_type
+
+    # ============================================================
+    # 8. インスタンスタイプ変更
+    # ============================================================
+
+    - name: Change EC2 instance type
+      amazon.aws.ec2_instance:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instance_id }}"
+        instance_type: "{{ instance_type }}"
+        state: stopped
+        wait: true
+      when: current_instance_type != instance_type
+
+    # ============================================================
+    # 9. インスタンスタイプ変更結果確認
+    # ============================================================
+
+    - name: Get updated EC2 instance information
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instance_id }}"
+      register: updated_ec2_info
+      when: current_instance_type != instance_type
+
+    - name: Show changed instance type
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "INSTANCE TYPE CHANGED"
+          - "Instance ID  : {{ target_instance_id }}"
+          - "Old Type     : {{ current_instance_type }}"
+          - "New Type     : {{ updated_ec2_info.instances[0].instance_type }}"
+          - "State        : {{ updated_ec2_info.instances[0].state.name }}"
+          - "=========================================="
+      when: current_instance_type != instance_type
+
+    # ============================================================
+    # 10. EC2を起動
+    # ============================================================
+
+    - name: Start EC2 instance
+      amazon.aws.ec2_instance:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instance_id }}"
+        state: running
+        wait: true
+      when: current_instance_type != instance_type
+
+    # ============================================================
+    # 11. 最終確認
+    # ============================================================
+
+    - name: Get final EC2 instance information
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instance_id }}"
+      register: final_ec2_info
+
+    - name: Show final result
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "EC2 INSTANCE TYPE CHANGE COMPLETE"
+          - "Name         : {{ target_hostname }}"
+          - "Instance ID  : {{ target_instance_id }}"
+          - "Instance Type: {{ final_ec2_info.instances[0].instance_type }}"
+          - "State        : {{ final_ec2_info.instances[0].state.name }}"
+          - "Region       : {{ region }}"
+          - "=========================================="
