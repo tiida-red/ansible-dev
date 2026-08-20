@@ -12,6 +12,8 @@
     ami_id: ami-0xxxxxxxxxxxxxxxxx
     root_volume_size: 30
     key_name: my-key-pair
+    subnet_number: 0
+    subnet_public_private: public
   tasks:
     - name: discover existing VPCs in the target region
       amazon.aws.ec2_vpc_net_info:

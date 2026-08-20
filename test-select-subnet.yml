@@ -1,0 +1,117 @@
+---
+- name: Find AWS subnet
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-2
+    vpc_id: vpc-xxxxxxxxxxxxxxxxx
+
+    # 検索条件
+    subnet_type: private
+    availability_zone: ap-northeast-1a
+
+  tasks:
+
+    - name: Get subnets
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          vpc-id: "{{ vpc_id }}"
+      register: subnet_info
+
+    - name: Get route tables
+      amazon.aws.ec2_vpc_route_table_info:
+        region: "{{ aws_region }}"
+        filters:
+          vpc-id: "{{ vpc_id }}"
+      register: route_table_info
+
+    - name: Initialize subnet list
+      ansible.builtin.set_fact:
+        subnet_list: []
+
+    - name: Determine subnet type
+      ansible.builtin.set_fact:
+        subnet_list: >-
+          {{
+            subnet_list + [{
+              'subnet_id': subnet.subnet_id,
+              'az': subnet.availability_zone,
+              'cidr': subnet.cidr_block,
+              'type': subnet_type_detected
+            }]
+          }}
+      vars:
+        associated_route_tables: >-
+          {{
+            route_table_info.route_tables
+            | selectattr('associations', 'defined')
+            | selectattr(
+                'associations',
+                'search',
+                subnet.subnet_id
+              )
+            | list
+          }}
+
+        subnet_type_detected: >-
+          {{
+            'public'
+            if (
+              associated_route_tables
+              | selectattr('routes', 'defined')
+              | selectattr(
+                  'routes',
+                  'search',
+                  'gateway_id'
+                )
+              | list
+              | length > 0
+            )
+            else 'private'
+          }}
+      loop: "{{ subnet_info.subnets }}"
+      loop_control:
+        loop_var: subnet
+
+    - name: Show all subnets
+      ansible.builtin.debug:
+        var: subnet_list
+
+    - name: Select requested subnet
+      ansible.builtin.set_fact:
+        selected_subnets: >-
+          {{
+            subnet_list
+            | selectattr('type', 'equalto', subnet_type)
+            | selectattr('az', 'equalto', availability_zone)
+            | list
+          }}
+
+    - name: Fail if no subnet found
+      ansible.builtin.fail:
+        msg: >-
+          No {{ subnet_type }} subnet found in
+          {{ availability_zone }}.
+      when: selected_subnets | length == 0
+
+    - name: Fail if multiple subnets found
+      ansible.builtin.fail:
+        msg: >-
+          Multiple {{ subnet_type }} subnets found in
+          {{ availability_zone }}:
+          {{ selected_subnets | map(attribute='subnet_id') | list }}
+      when: selected_subnets | length > 1
+
+    - name: Set selected subnet ID
+      ansible.builtin.set_fact:
+        selected_subnet_id: "{{ selected_subnets[0].subnet_id }}"
+
+    - name: Show selected subnet
+      ansible.builtin.debug:
+        msg:
+          subnet_id: "{{ selected_subnet_id }}"
+          type: "{{ subnet_type }}"
+          availability_zone: "{{ availability_zone }}"
