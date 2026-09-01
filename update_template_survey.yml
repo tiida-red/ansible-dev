@@ -9,35 +9,27 @@
     aap_password: "Your password"
 
     # --- 変更対象のテンプレート情報 ---
-    target_job_template_name: "Deploy Application"
+    target_job_template_name: "Check_Package"
 
     # --- 新しい Survey 定義 (JSON/YAML 構造) ---
     new_survey_spec:
-      name: "Application Deployment Survey"
-      description: "Survey for deployment parameters"
+      name: "Package Version Check Survey"
+      description: "Survey for package version checking parameters"
       spec:
-        - question_name: "ターゲットバージョン選択"
-          question_description: "デプロイするバージョンを選択してください"
-          variable: "target_version"
-          type: "multiplechoice"  # ドロップダウンリスト
+        - question_name: "ターゲットパッケージ選択"
+          question_description: "チェックするパッケージを選択してください"
+          variable: "target_package"
+          type: "singlechoice"  # ドロップダウンリスト
           required: true
-          default: "2.1.0"
+          default: "bash"
           # ★ここでドロップダウンのリスト項目（選択肢）を更新します
           choices:
-            - "2.0.0"
-            - "2.1.0"
-            - "2.2.0-beta"
-
-        - question_name: "対象環境"
-          question_description: "デプロイ先の環境"
-          variable: "env_type"
-          type: "multiplechoice"
-          required: true
-          default: "Staging"
-          choices:
-            - "Development"
-            - "Staging"
-            - "Production"
+            - "bash"
+            - "vim"
+            - "nano"
+            - "ansible-core"
+            - "python3"
+            - "openssh"
 
   tasks:
     - name: Update Survey spec in Automation Controller
