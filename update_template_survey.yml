@@ -33,7 +33,7 @@
 
   tasks:
     - name: Update Survey spec in Automation Controller
-      awx.awx.job_template:
+      redhat.ansible_automation_platform.job_template:
         controller_host: "{{ aap_controller_url }}"
         controller_username: "{{ aap_username }}"
         controller_password: "{{ aap_password }}"
