@@ -1,0 +1,15 @@
+# RHELのすべてのインストールされているパッケージを表示するplaybook
+- name: Show all installed packages on RHEL hosts
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Get package facts
+      ansible.builtin.package_facts:
+        manager: rpm
+    - name: Display all installed packages
+      ansible.builtin.debug:
+        msg: >-
+          [{{ inventory_hostname }}] インストールされているパッケージ一覧:
+          {% for pkg, details in ansible_facts.packages.items() %}
+          - {{ pkg }}: {{ details[0].version }}-{{ details[0].release }} ({{ details[0].arch }})
+          {% endfor %} 
