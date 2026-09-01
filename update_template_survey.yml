@@ -25,6 +25,7 @@
           # ★ここでドロップダウンのリスト項目（選択肢）を更新します
           choices:
             - "bash"
+            - "kernel"
             - "vim"
             - "nano"
             - "ansible-core"
