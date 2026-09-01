@@ -19,7 +19,7 @@
         - question_name: "ターゲットパッケージ選択"
           question_description: "チェックするパッケージを選択してください"
           variable: "target_package"
-          type: "singlechoice"  # ドロップダウンリスト
+          type: "multiplechoice"  # ドロップダウンリスト
           required: true
           default: "bash"
           # ★ここでドロップダウンのリスト項目（選択肢）を更新します
