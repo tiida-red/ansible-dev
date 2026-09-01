@@ -1,0 +1,24 @@
+---
+- name: Check Specific Package Version on RHEL Hosts
+  hosts: all
+  gather_facts: false
+
+  # Survey の変数が渡されない場合のデフォルト値設定（安全対策）
+  vars:
+    target_package: "{{ target_package | default('bash') }}"
+
+  tasks:
+    - name: Get package facts
+      ansible.builtin.package_facts:
+        manager: rpm
+
+    - name: Display package version information
+      ansible.builtin.debug:
+        msg: >-
+          {% if target_package in ansible_facts.packages %}
+          [{{ inventory_hostname }}] {{ target_package }} のバージョン:
+          {{ ansible_facts.packages[target_package] | map(attribute='version') | join(', ') }}-{{ ansible_facts.packages[target_package] | map(attribute='release') | join(', ') }}
+          ({% if ansible_facts.packages[target_package] | map(attribute='arch') | first %}{{ ansible_facts.packages[target_package] | map(attribute='arch') | first }}{% endif %})
+          {% else %}
+          [{{ inventory_hostname }}] {{ target_package }} はインストールされていません。
+          {% endif %}

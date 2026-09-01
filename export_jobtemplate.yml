@@ -1,0 +1,29 @@
+---
+- name: AAP Job Template の設定情報をコードとしてエクスポートする
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # 接続情報
+    controller_host: "https://your-aap-gateway.example.com"
+    controller_username: "admin"
+    controller_password: "your_password"
+    validate_certs: false
+    # エクスポート対象
+    target_job_template: "My Demo Job Template"
+
+  tasks:
+    - name: ジョブテンプレートの構成情報を抽出
+      ansible.controller.export:
+        controller_host: "{{ controller_host }}"
+        controller_username: "{{ controller_username }}"
+        controller_password: "{{ controller_password }}"
+        validate_certs: "{{ validate_certs }}"
+        # 抽出するリソースを指定 (Job Template以外にもプロジェクトやインベントリ等も指定可能)
+        job_templates: "{{ target_job_template }}"
+      register: r_export
+
+    - name: エクスポートしたデータをYAMLファイルとして保存
+      ansible.builtin.copy:
+        content: "{{ r_export.assets | to_nice_yaml(indent=2) }}"
+        dest: "./exported_{{ target_job_template | slugify }}.yml"

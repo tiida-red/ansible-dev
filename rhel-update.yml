@@ -5,7 +5,6 @@
   vars:
     target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
     region: "ap-northeast-1"
-  vars:
     reboot_after_patch: true # OSパッチ適用後に再起動するか
     reboot_timeout: 600
 

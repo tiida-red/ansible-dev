@@ -1,0 +1,56 @@
+---
+- name: Update Job Template Survey Options
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # --- 接続情報 ---
+    aap_controller_url: "https://ec2-3-25-173-252.ap-southeast-2.compute.amazonaws.com/"
+    aap_username: "admin"
+    aap_password: "Your password"
+
+    # --- 変更対象のテンプレート情報 ---
+    target_job_template_name: "Deploy Application"
+
+    # --- 新しい Survey 定義 (JSON/YAML 構造) ---
+    new_survey_spec:
+      name: "Application Deployment Survey"
+      description: "Survey for deployment parameters"
+      spec:
+        - question_name: "ターゲットバージョン選択"
+          question_description: "デプロイするバージョンを選択してください"
+          variable: "target_version"
+          type: "multiplechoice"  # ドロップダウンリスト
+          required: true
+          default: "2.1.0"
+          # ★ここでドロップダウンのリスト項目（選択肢）を更新します
+          choices:
+            - "2.0.0"
+            - "2.1.0"
+            - "2.2.0-beta"
+
+        - question_name: "対象環境"
+          question_description: "デプロイ先の環境"
+          variable: "env_type"
+          type: "multiplechoice"
+          required: true
+          default: "Staging"
+          choices:
+            - "Development"
+            - "Staging"
+            - "Production"
+
+  tasks:
+    - name: Update Survey spec in Automation Controller
+      awx.awx.job_template:
+        controller_host: "{{ aap_controller_url }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: false
+        name: "{{ target_job_template_name }}"
+        survey_enabled: true
+        survey_spec: "{{ new_survey_spec }}"
+      register: survey_update_result
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "ジョブテンプレート '{{ target_job_template_name }}' の Survey リスト項目を正常に更新しました。"
