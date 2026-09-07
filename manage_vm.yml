@@ -15,4 +15,4 @@
         instance_ids: "{{ lookup('amazon.aws.ec2_instance_info', filters={'tag:Name': instance_name, 'instance-state-name': 'running'}, region=region).instances | map(attribute='instance_id') | list }}"
         wait: true
         wait_timeout: 600
-        state: {{ state }}
+        state: "{{ state }}"
