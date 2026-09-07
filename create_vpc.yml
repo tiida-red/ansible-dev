@@ -25,6 +25,7 @@
         map_public: true  # ★パブリックIP自動割り当てを有効化
         tags:
           module: ec2_vpc_public_subnet
+          Name: "{{ vpc_name }}-public-subnet"
       register: public_subnet
     - name: Create a new subnet using net-name
       amazon.aws.ec2_vpc_subnet:
@@ -34,6 +35,7 @@
         region:  "{{ region }}"
         tags:
           module: ec2_vpc_private_subnet
+          Name: "{{ vpc_name }}-private-subnet"
       register: private_subnet
     - name: Create a new Internet Gateway attached to the VPC
       amazon.aws.ec2_vpc_igw:
