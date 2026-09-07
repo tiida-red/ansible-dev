@@ -20,7 +20,7 @@
       amazon.aws.ec2_vpc_subnet:
         state: present
         vpc_id: "{{ vpc.vpc.id }}"
-        cidr: {{ cidr_block | ansible.utils.cidrsubnet(4, 1) }}
+        cidr: "{{ cidr_block | ansible.utils.cidrsubnet(4, 1) }}"
         region:  "{{ region }}"
         map_public: true  # ★パブリックIP自動割り当てを有効化
         tags:
@@ -29,7 +29,7 @@
     - name: Create a new subnet using net-name
       amazon.aws.ec2_vpc_subnet:
         state: present
-        cidr: {{ cidr_block | ansible.utils.cidrsubnet(4, 2) }}
+        cidr: "{{ cidr_block | ansible.utils.cidrsubnet(4, 2) }}"
         region:  "{{ region }}"
         tags:
           module: ec2_vpc_private_subnet
