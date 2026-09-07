@@ -29,6 +29,7 @@
     - name: Create a new subnet using net-name
       amazon.aws.ec2_vpc_subnet:
         state: present
+        vpc_id: "{{ vpc.vpc.id }}"
         cidr: "{{ cidr_block | ansible.utils.ipsubnet(20, 2) }}"
         region:  "{{ region }}"
         tags:
