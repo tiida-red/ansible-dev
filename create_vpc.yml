@@ -77,4 +77,5 @@
         - dest: 0.0.0.0/0
           nat_gateway_id: "{{ NAT.nat_gateway_id }}"
         state: present
-     register: private_route_table
+      register: private_route_table
+      
