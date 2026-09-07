@@ -20,7 +20,7 @@
       amazon.aws.ec2_vpc_subnet:
         state: present
         vpc_id: "{{ vpc.vpc.id }}"
-        cidr: {{ cidr_block | ipaddr('subnet', 20, 1) }}
+        cidr: {{ cidr_block | ansible.utils.cidrsubnet(4, 1) }}
         region:  "{{ region }}"
         map_public: true  # ★パブリックIP自動割り当てを有効化
         tags:
@@ -29,33 +29,35 @@
     - name: Create a new subnet using net-name
       amazon.aws.ec2_vpc_subnet:
         state: present
-        vpc_id: "{{ vpc.vpc.id }}"
-        cidr: 10.20.2.0/24
+        cidr: {{ cidr_block | ansible.utils.cidrsubnet(4, 2) }}
         region:  "{{ region }}"
         tags:
           module: ec2_vpc_private_subnet
+      register: private_subnet
     - name: Create a new Internet Gateway attached to the VPC
       amazon.aws.ec2_vpc_igw:
         vpc_id: "{{ vpc.vpc.id }}"
         region:  "{{ region }}"
         tags:
-          Name: Module dev2 gateway
+          Name: "{{ vpc_name }}-igw"
         state: present
       register: IGW
-#    - name: Create a new NAT Gateway attached to the VPC
-#      amazon.aws.ec2_vpc_nat_gateway:
-#        state: present
-#        subnet_id: "{{ public_subnet.subnet.id }}"
-#        region:  "{{ region }}"
-#        if_exist_do_not_create: true
-#        wait: true
-#      register: NAT
-    - name: Create a new route table
+    - name: Create a new NAT Gateway attached to the VPC
+      amazon.aws.ec2_vpc_nat_gateway:
+        state: present
+        subnet_id: "{{ public_subnet.subnet.id }}"
+        region:  "{{ region }}"
+        tags:
+          Name: "{{ vpc_name }}-nat-gateway"
+        if_exist_do_not_create: true
+        wait: true
+      register: NAT
+    - name: Create a new public route table
       amazon.aws.ec2_vpc_route_table:
         vpc_id: "{{ vpc.vpc.id }}"
         region:  "{{ region }}"
         tags:
-          Name: Module dev2 public route table
+          Name: "{{ vpc_name }}-public-route-table"
         subnets:
         - "{{ public_subnet.subnet.id }}"
         routes:
@@ -63,16 +65,16 @@
           gateway_id: "{{ IGW.gateway_id }}"
         state: present
       register: public_route_table
-#    - name: Create a new route table
-#      amazon.aws.ec2_vpc_route_table:
-#        vpc_id: "{{ vpc.vpc.id }}"
-#        region:  "{{ region }}"
-#        tags:
-#          Name: Module dev2 private route table
-#        subnets:
-#        - "{{ private_subnet.subnet.id }}"
-#        routes:
-#        - dest: 0.0.0.0/0
-#          nat_gateway_id: "{{ NAT.nat_gateway_id }}"
-#        state: present
-#     register: private_route_table
+    - name: Create a new private route table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region:  "{{ region }}"
+        tags:
+          Name: "{{ vpc_name }}-private-route-table"
+        subnets:
+        - "{{ private_subnet.subnet.id }}"
+        routes:
+        - dest: 0.0.0.0/0
+          nat_gateway_id: "{{ NAT.nat_gateway_id }}"
+                  state: present
+     register: private_route_table
