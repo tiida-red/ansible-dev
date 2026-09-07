@@ -10,9 +10,10 @@
  
   tasks:
     - name: manage ec2 instance
-      amazon.aws.ec2:
+      amazon.aws.ec2_instance:
         region: "{{ region }}"
         instance_ids: "{{ lookup('amazon.aws.ec2_instance_info', filters={'tag:Name': instance_name, 'instance-state-name': 'running'}, region=region).instances | map(attribute='instance_id') | list }}"
         wait: true
         wait_timeout: 600
         state: "{{ state }}"
+      register: ec2_result
