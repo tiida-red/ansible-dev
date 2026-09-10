@@ -1,0 +1,9 @@
+---
+all:
+  hosts:
+    rhal10-vm1:
+      ansible_host: ec2-52-193-255-215.ap-northeast-1.compute.amazonaws.com
+    aap-sv:
+      ansible_host: ec2-54-65-50-70.ap-northeast-1.compute.amazonaws.com
+  vars:
+    ansible_user: ec2-user

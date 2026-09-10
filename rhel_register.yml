@@ -1,0 +1,26 @@
+---
+- name: Register target RHEL server to subscription-manager and enable required repositories
+
+  hosts: "{{ target_hostname }} : all"
+  gather_facts: true
+  become: true # root 権限で実行
+  vars:
+    target_hostname:  # 対象のインスタンス名（Nameタグ）を指定
+    region: "ap-northeast-1"
+    rhsm_username: "your_rhsm_username" # Red Hat Subscription Manager のユーザー名
+    rhsm_password: "your_rhsm_password" # Red Hat Subscription Manager のパスワード
+
+  tasks:
+    - name: Register the system with Red Hat Subscription Manager
+      ansible.builtin.command:
+        cmd: >
+          subscription-manager register
+          --username {{ rhsm_username }}
+          --password {{ rhsm_password }}
+      register: register_result
+      ignore_errors: true
+
+    - name: Show registration result for debugging
+      ansible.builtin.debug:
+        msg: "Registration result: {{ register_result.stdout }}"
+

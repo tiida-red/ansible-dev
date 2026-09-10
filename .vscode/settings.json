@@ -1,0 +1,8 @@
+{
+    "ansible.mcpServer.enabled": true,
+    "ansible.executionEnvironment.containerEngine": "podman",
+    "ansible.executionEnvironment.image": "registry.redhat.io/ansible-automation-platform-25/ee-supported-rhel9:latest",
+    "ansible.validation.lint.path": "/usr/local/bin/ansible-lint",
+    "ansible.ansibleNavigator.path": "ansible-navigator -m stdout"
+ 
+}

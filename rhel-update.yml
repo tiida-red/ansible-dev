@@ -1,7 +1,8 @@
 ---
 - name: "RHEL Update and Reboot Playbook"
-  hosts: "{{ target_hostname }}"
+  hosts: "{{ target_hostname }} : all"
   gather_facts: true
+  become: true # root 権限で実行
   vars:
     target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
     region: "ap-northeast-1"
@@ -9,9 +10,10 @@
     reboot_timeout: 600
 
   tasks:
-    - name: Ensure target host is specified or confirmed
+    - name: inventoryで登録されているホスト一覧を取得
       ansible.builtin.debug:
-        msg: "対象ホスト: '{{ target_hostname }}' に対してパッケージ更新（dnf update）を開始します。"
+        msg: "対象ホスト: {{ inventory_hostname }} のパッケージを最新に更新します"
+
     # --------------------------------------------------
     # 1. OS パッチの最新化
     # --------------------------------------------------

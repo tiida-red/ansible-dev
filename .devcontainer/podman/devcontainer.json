@@ -1,6 +1,6 @@
 {
   "name": "ansible-dev-container-podman",
-  "image": "ghcr.io/ansible/community-ansible-dev-tools:latest",
+  "image": "registry.redhat.io/ansible-automation-platform-26/ansible-dev-tools-rhel9:latest",
   "containerUser": "root",
   "runArgs": [
     "--cap-add=CAP_MKNOD",
@@ -24,5 +24,10 @@
     "vscode": {
       "extensions": ["redhat.ansible","redhat.vscode-redhat-account"]
     }
-  }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.aws,target=/home/runner/.aws,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/containers,target=/home/runner/.config/containers,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/runner/.ssh,type=bind,consistency=cached",
+  ]
 }
