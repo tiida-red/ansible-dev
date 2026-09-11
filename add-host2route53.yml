@@ -6,6 +6,7 @@
     region: "ap-northeast-1"
     target_hostname: "my-rhel-server"    # 検出対象のEC2インスタンス名（Nameタグ）
     hosted_zone_name: "example.com"       # Route 53のパブリック/プライベートホストゾーン名
+    ip_type: "private"                     # "private" または "public" を指定（Route 53のゾーンタイプに応じて変更）
 
   tasks:
     # --------------------------------------------------
@@ -31,7 +32,7 @@
 
     - name: 検出されたIPアドレスを変数にセット
       ansible.builtin.set_fact:
-        target_ip: "{{ ec2_info.instances[0].private_ip_address }}" # プライベートIPの場合は private_ip_address に変更
+        target_ip: "{{ ec2_info.instances[0][ip_type + '_ip_address'] }}" # プライベートIPの場合は private_ip_address に変更
 
     # --------------------------------------------------
     # 2. Route 53 ホストゾーンの存在確認
