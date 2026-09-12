@@ -1,10 +1,9 @@
 ---
 - name: "RHEL Update and Reboot Playbook"
-  hosts: "{{ target_hostname }} : all"
+  hosts: all
   gather_facts: true
   become: true # root 権限で実行
   vars:
-    target_hostname: "my-rhel-server" # 対象のインスタンス名（Nameタグ）を指定
     region: "ap-northeast-1"
     reboot_after_patch: true # OSパッチ適用後に再起動するか
     reboot_timeout: 600

@@ -63,4 +63,11 @@
           レコード {{ target_hostname }}.{{ hosted_zone_name }} を IP: {{ target_ip }} で更新・作成しました。
           {% else %}
           レコード {{ target_hostname }}.{{ hosted_zone_name }} はすでに最新の IP ({{ target_ip }}) で登録されています。
-          {% endif %}
+          {% endif %}          collections:
+            - ansible.posix
+          
+          - name: 新規ユーザーへ SSH 公開鍵を設定
+            ansible.posix.authorized_key:
+              user: "{{ new_username }}"
+              state: present
+              key: "{{ source_authorized_keys.content | b64decode }}"
