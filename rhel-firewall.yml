@@ -70,4 +70,3 @@
     - name: Show current firewalld configuration for debugging
       ansible.builtin.debug:
         msg: "Current firewalld configuration: {{ firewall_config.stdout }}"
-

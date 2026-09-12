@@ -1,0 +1,27 @@
+---
+- name: セキュリティグループ設定 playbook
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server"  # 対象のインスタンス名（Nameタグ）を指定
+    security_group_name: "my-security-group"  # 設定するセキュリティグループ名
+    inbound_rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: "0.0.0.0/0"
+
+  tasks:
+    - name: "セキュリティグループの設定"
+      amazon.aws.ec2_group:
+        name: "{{ security_group_name }}"
+        description: "Security group for {{ target_hostname }}"
+        region: "{{ region }}"
+        rules: "{{ inbound_rules }}"
+        state: present
+      register: sg_result
+
+    - name: "セキュリティグループ設定結果の表示"
+      debug:
+        msg: "セキュリティグループ {{ security_group_name }} の設定が完了しました。"
