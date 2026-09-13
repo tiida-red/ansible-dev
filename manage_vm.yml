@@ -15,7 +15,7 @@
         filters:
           "tag:Name": "{{ instance_name }}"
       register: ec2_info
-    - name: manage ec2 instance
+    - name: manage ec2 instancels
       amazon.aws.ec2_instance:
         region: "{{ region }}"
         instance_ids: "{{ ec2_info.instances[0].instance_id }}"
