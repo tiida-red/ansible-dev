@@ -4,6 +4,6 @@ all:
     rhal10-vm1:
       ansible_host: rhel10-vm1.sandbox534.opentlc.com
     aap-sv:
-      ansible_host: aap-sv.sandbox534.opentlc.com
+      ansible_host: aap-sv.sandbox3534.opentlc.com
   vars:
     ansible_user: ec2-user
