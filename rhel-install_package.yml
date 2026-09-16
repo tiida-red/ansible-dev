@@ -4,7 +4,7 @@
   become: true
   gather_facts: false
   vars:
-    packages_to_install: "{{ target_package | default('bash') }}"
+    package_to_install: "{{ target_package | default('bash') }}"
     state: "{{ package_state | default('present') }}"  # 'present' or 'absent'
 
   tasks:  
