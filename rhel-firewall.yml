@@ -9,7 +9,7 @@
     services_to_enable: # firewalldで許可するサービス名のリスト ["service", "service2", ...]
       - http
       - https
-    ports_to_open:
+    ports_to_open: # firewalldで許可するポート番号のリスト ["port/protocol", "port2/protocol2", ...]
       - 8080/tcp
       - 8443/tcp
 

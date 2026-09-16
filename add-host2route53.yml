@@ -32,7 +32,7 @@
     - name: 検出されたIPアドレスを変数にセット
       ansible.builtin.set_fact:
         private_ip: "{{ ec2_info.instances[0].private_ip_address }}" # プライベートIPアドレスを取得
-        public_ip: "{{ ec2_info.instances[0].public_ip_address }}"   # パ
+        public_ip: "{{ ec2_info.instances[0].public_ip_address }}"   # パブリックIPアドレスを取得
 
     # --------------------------------------------------
     # IPアドレスを表示
@@ -64,7 +64,7 @@
           {{
             route53_zones.hosted_zones
             | selectattr('name', 'equalto', hosted_zone_name + '.')
-            | selectattr('config.private_zone', 'equalto', true)
+            | selectattr('config.private_zone', 'equalto', false)
             | map(attribute='id')
             | map('regex_replace', '^/hostedzone/', '')
             | first

@@ -4,10 +4,10 @@
   collections:
     - amazon.aws
   vars:
-    region:  us-east-2
+    region: us-east-2
     instance_name: rhel10-demo
-    state: stopped #stopped or running or terminated
- 
+    state: stopped # stopped or running or terminated
+
   tasks:
     - name: Show the current state of the instance
       amazon.aws.ec2_instance_info:
@@ -15,7 +15,20 @@
         filters:
           "tag:Name": "{{ instance_name }}"
       register: ec2_info
-    - name: manage ec2 instancels
+
+    # 1. 該当するインスタンスが存在しない場合の安全なアサート（または警告）
+    - name: Fail if target instance is not found
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length > 0
+        fail_msg: "Target EC2 instance '{{ instance_name }}' was not found in region '{{ region }}'."
+        success_msg: "Found EC2 instance '{{ instance_name }}'."
+
+    - name: Display the current state of the instance
+      ansible.builtin.debug:
+        msg: "Current state of the instance '{{ instance_name }}': {{ ec2_info.instances[0].state.name }}"
+
+    - name: Manage EC2 instance
       amazon.aws.ec2_instance:
         region: "{{ region }}"
         instance_ids: "{{ ec2_info.instances[0].instance_id }}"

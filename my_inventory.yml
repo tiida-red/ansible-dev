@@ -2,8 +2,12 @@
 all:
   hosts:
     rhal10-vm1:
-      ansible_host: rhel10-vm1.sandbox534.opentlc.com
+      ansible_host: rhel10-vm1.sandbox1630.opentlc.com
     aap-sv:
-      ansible_host: aap-sv.sandbox3534.opentlc.com
+      ansible_host: aap-sv.sandbox1630.opentlc.com
+    awx:
+      ansible_host: awx.sandbox1630.opentlc.com
+    rhel10-work:
+      ansible_host: rhel10-work.sandbox1630.opentlc.com
   vars:
     ansible_user: ec2-user
