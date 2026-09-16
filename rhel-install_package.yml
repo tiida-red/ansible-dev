@@ -10,14 +10,14 @@
   tasks:  
     - name: Install package
       ansible.builtin.yum:
-        name: "{{ packages_to_install }}"
+        name: "{{ package_to_install }}"
         state: "{{ state }}"
       register: package_result
     - name: Display package installation result
       ansible.builtin.debug:
         msg: >-
           {% if package_result.changed %}
-          Package '{{ packages_to_install }}' has been {{ state }}.
+          Package '{{ package_to_install }}' has been {{ state }}.
           {% else %}
-          Package '{{ packages_to_install }}' was already {{ state }}.
+          Package '{{ package_to_install }}' was already {{ state }}.
           {% endif %}
