@@ -9,12 +9,17 @@
 
   tasks:  
     - name: Install package
-      ansible.builtin.yum:
+      ansible.builtin.dnf:
         name: "{{ package_to_install }}"
         state: "{{ state }}"
       register: package_result
-    - name: Display package installation result
+
+    - name: Install package List
       ansible.builtin.debug:
+        msg: "{{ package_result.results }}"
+
+    - name: Display package installation result
+      ansible.builtin.debug: 
         msg: >-
           {% if package_result.changed %}
           Package '{{ package_to_install }}' has been {{ state }}.
