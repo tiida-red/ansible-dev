@@ -1,0 +1,162 @@
+---
+- name: EC2ホストを検出してRoute 53へAレコード登録
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "ap-northeast-1"
+    hosted_zone_name: "example.com"       # Route 53のパブリック/プライベートホストゾーン名
+
+  tasks:
+    # --------------------------------------------------
+    # 1. EC2インスタンス情報を取得
+    # --------------------------------------------------
+    - name: get EC2 instance info by Name tag
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "instance-state-name": "running"
+      register: ec2_info
+
+    - name: show EC2 instance info for debugging
+      ansible.builtin.debug:
+        msg: "EC2インスタンス情報: {{ ec2_info.instances }}"
+
+    - name: 実行中のEC2インスタンスが存在することを確認
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length > 0
+        fail_msg: >-
+          リージョン '{{ region }}' に実行中のEC2インスタンスが見つかりません。
+          region、AWSアカウント、またはインスタンスの状態を確認してください。
+
+    # --------------------------------------------------
+    # 2. Route 53 ホストゾーンの存在確認
+    # --------------------------------------------------
+    - name: Route 53 ホストゾーン情報の取得
+      amazon.aws.route53_info:
+        query: hosted_zone
+      register: route53_zones
+
+    - name: Route 53 ホストゾーン情報を表示
+      ansible.builtin.debug:
+        msg: "Route 53 ホストゾーン情報: {{ route53_zones.hosted_zones }}"
+
+    #--------------------------------------------------
+    # 2. Public ゾーンIDを取得
+    #--------------------------------------------------
+    - name: Public/Private Hosted Zoneの候補を抽出
+      ansible.builtin.set_fact:
+        public_hosted_zones: >-
+          {{
+            route53_zones.hosted_zones
+            | selectattr('name', 'equalto', (hosted_zone_name | regex_replace('\.?$', '')) + '.')
+            | selectattr('config.private_zone', 'equalto', false)
+            | list
+          }}
+        private_hosted_zones: >-
+          {{
+            route53_zones.hosted_zones
+            | selectattr('name', 'equalto', (hosted_zone_name | regex_replace('\.?$', '')) + '.')
+            | selectattr('config.private_zone', 'equalto', true)
+            | list
+          }}
+
+    - name: Public Hosted Zone IDを取得
+      ansible.builtin.set_fact:
+        public_hosted_zone_id: >-
+          {{ (public_hosted_zones[0].id | regex_replace('^/hostedzone/', ''))
+             if public_hosted_zones | length > 0 else '' }}
+    # ==================================================
+    # 3. Private ゾーンIDを取得
+    # ==================================================
+    - name: Private Hosted Zone IDを取得
+      ansible.builtin.set_fact:
+            private_hosted_zone_id: >-
+              {{ (private_hosted_zones[0].id | regex_replace('^/hostedzone/', ''))
+                 if private_hosted_zones | length > 0 else '' }}
+    #  Hosted Zoneが正しく取得できたか確認
+    - name: Hosted Zone IDを表示
+      ansible.builtin.debug:
+        msg:
+          - "Public Hosted Zone ID: {{ public_hosted_zone_id }}"
+          - "Private Hosted Zone ID: {{ private_hosted_zone_id }}"
+
+    - name: Public Hosted Zoneが存在することを確認
+      ansible.builtin.assert:
+        that:
+          - public_hosted_zone_id is defined
+          - public_hosted_zone_id != ""
+          - public_hosted_zone_id != None
+        fail_msg: >-
+          Public Hosted Zone '{{ hosted_zone_name }}' が
+          Route 53に見つかりません。
+
+    - name: Private Hosted Zoneが存在することを確認
+      ansible.builtin.assert:
+        that:
+          - private_hosted_zone_id is defined
+          - private_hosted_zone_id != ""
+          - private_hosted_zone_id != None
+        fail_msg: >-
+          Private Hosted Zone '{{ hosted_zone_name }}' が
+          Route 53に見つかりません。
+
+    # --------------------------------------------------
+    # 4. 各EC2インスタンスの情報（Nameタグ、IP）をループして登録
+    # --------------------------------------------------
+    - name: Public Hosted ZoneへAレコードを登録
+      amazon.aws.route53:
+        state: present
+        hosted_zone_id: "{{ public_hosted_zone_id }}"
+        record: "{{ item.tags.Name | default('unnamed-ec2') }}.{{ hosted_zone_name }}"
+        type: A
+        ttl: 300
+        value:
+          - "{{ item.public_ip_address }}"
+        overwrite: true
+      # public_ip_address が存在し、かつ空文字でない場合のみ実行
+      when:
+        - item.public_ip_address is defined
+        - item.public_ip_address is not none
+        - item.public_ip_address != ""
+      loop: "{{ ec2_info.instances }}"
+      loop_control:
+        label: "{{ item.tags.Name | default(item.instance_id) }} -> {{ item.public_ip_address | default('No-Public-IP') }}"
+
+    - name: Private Hosted ZoneへAレコードを登録
+      amazon.aws.route53:
+        state: present
+        hosted_zone_id: "{{ private_hosted_zone_id }}"
+        record: "{{ item.tags.Name | default('unnamed-ec2') }}.{{ hosted_zone_name }}"
+        type: A
+        ttl: 300
+        value:
+          - "{{ item.private_ip_address }}"
+        overwrite: true
+      when:
+        - item.private_ip_address is defined
+        - item.private_ip_address is not none
+        - item.private_ip_address != ""
+      loop: "{{ ec2_info.instances }}"
+      loop_control:
+        label: "{{ item.tags.Name | default(item.instance_id) }} -> {{ item.private_ip_address }}"
+
+    - name: 実行結果の確認 (Public Hosted Zone)
+      amazon.aws.route53_info:
+        query: record_sets
+        hosted_zone_id: "{{ public_hosted_zone_id }}"
+      register: public_records
+    - name: Public Hosted ZoneのAレコードを表示
+      ansible.builtin.debug:
+        msg: "Public Hosted ZoneのAレコード: {{ item.name }} -> {{ item.resource_records[0].value }}"
+      loop: "{{ public_records.resource_record_sets | selectattr('type', 'equalto', 'A') | list }}"
+
+    - name: 実行結果の確認 (Private Hosted Zone)
+      amazon.aws.route53_info:
+        query: record_sets
+        hosted_zone_id: "{{ private_hosted_zone_id }}"
+      register: private_records
+    - name: Private Hosted ZoneのAレコードを表示
+      ansible.builtin.debug:
+        msg: "Private Hosted ZoneのAレコード: {{ item.name }} -> {{ item.resource_records[0].value }}"
+      loop: "{{ private_records.resource_record_sets | selectattr('type', 'equalto', 'A') | list }}"
