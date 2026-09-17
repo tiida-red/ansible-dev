@@ -10,6 +10,7 @@
     # 公開鍵のコピー元ユーザー（EC2標準の既存ユーザー）
     source_ssh_user: "ec2-user"
     # 特定のホストにのみ実施するには--limitオプションでホストを指定する
+    password: ""  # 必要に応じてパスワードを設定（SSHログイン用）
 
   tasks:
     # --------------------------------------------------
@@ -25,6 +26,14 @@
         state: present
         shell: /bin/bash
         create_home: true
+
+    - name: ユーザーのパスワード設定
+      ansible.builtin.user:
+        name: "{{ new_username }}"
+        password: "{{ password | ansible.builtin.password_hash('sha512') }}"
+        state: present
+      when: password | length > 0  # パスワードが空でない場合のみ設定
+      no_log: true
 
     # --------------------------------------------------
     # 2. パスワードなし sudo の設定 (sudoers)
@@ -55,7 +64,7 @@
       register: source_authorized_keys
 
     - name: 新規ユーザーへ SSH 公開鍵を設定
-      ansible.builtin.authorized_key:
+      ansible.posix.authorized_key:
         user: "{{ new_username }}"
         state: present
         key: "{{ source_authorized_keys.content | b64decode }}"
