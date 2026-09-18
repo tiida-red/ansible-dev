@@ -1,0 +1,41 @@
+---
+- name: Create EC2 AMI Backup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    region: "ap-northeast-1"
+    target_hostname: "my-rhel-server"
+
+  tasks:
+
+    - name: EC2情報を取得
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+          "instance-state-name": "running"
+      register: ec2_info
+
+    - name: EC2が存在することを確認
+      ansible.builtin.assert:
+        that:
+          - ec2_info.instances | length == 1
+        fail_msg: >-
+          Nameタグ '{{ target_hostname }}' に一致する
+          EC2が1台ではありません。
+
+    - name: AMIを作成
+      amazon.aws.ec2_ami:
+        region: "{{ region }}"
+        instance_id: "{{ ec2_info.instances[0].instance_id }}"
+        name: "{{ target_hostname }}-{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+        description: "Backup of {{ target_hostname }}"
+        wait: true
+        no_reboot: false
+      register: ami_result
+
+    - name: AMI IDを表示
+      ansible.builtin.debug:
+        msg: "作成されたAMI: {{ ami_result.image_id }}"
