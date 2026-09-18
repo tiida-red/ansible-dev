@@ -7,14 +7,14 @@
   vars:
     ssm_region: us-east-1
     ssm_agent_rpm: /tmp/amazon-ssm-agent.rpm
-    ssm_agent_download_url: "https://s3.{{ ssm_region }}.amazonaws.com/amazon-ssm-{{ ssm_region }}/latest/linux_amd64/amazon-ssm-agent.rpm"
+    ssm_agent_download_url: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
     ssm_agent_gpg_key_url: "https://s3.{{ ssm_region }}.amazonaws.com/amazon-ssm-{{ ssm_region }}/latest/linux_amd64/amazon-ssm-agent.rpm.sig"
 
   tasks:
-    - name: Import SSM Agent GPG key
-      ansible.builtin.rpm_key:
-        state: present
-        key: "{{ ssm_agent_gpg_key_url }}"
+ #   - name: Import SSM Agent GPG key
+ #     ansible.builtin.rpm_key:
+ #       state: present
+ #       key: "{{ ssm_agent_gpg_key_url }}"
 
     - name: Download SSM Agent package
       ansible.builtin.get_url:
@@ -26,6 +26,7 @@
       ansible.builtin.dnf:
         name: "{{ ssm_agent_rpm }}"
         state: present
+        disable_gpg_check: true
 
     - name: Enable and start SSM Agent
       ansible.builtin.systemd:
