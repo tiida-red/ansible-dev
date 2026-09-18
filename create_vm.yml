@@ -250,3 +250,7 @@
         data:
           limit: "{{ ec2_instance.instances[0].tags.Name }}"
         per_host: false # ワークフロー全体で共有するため false (デフォルト) のままにします
+
+    - name: Limit変数を確認する
+      ansible.builtin.debug:
+        msg: "Limit variable set to: {{ ansible_stats.limit }}"
