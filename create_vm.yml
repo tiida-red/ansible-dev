@@ -245,12 +245,17 @@
             - yum-utils
       register: updated_instance
 
-    - name: 作成された EC2 の ホスト名をワークフローの Limit 変数へセット
+    - name: Set fact for limit variable based on the Name tag of the created instance
+      ansible.builtin.set_fact:
+        limit: "{{ ec2_instance.instances[0].tags.Name }}"
+  
+
+    - name: ワークフローの統計へLimit値をセット
       ansible.builtin.set_stats:
         data:
-          limit: "{{ ec2_instance.instances[0].tags.Name }}"
-        per_host: false # ワークフロー全体で共有するため false (デフォルト) のままにします
+          limit: "{{ limit }}"
+        per_host: false
 
-    - name: Limit変数を確認する
+    - name: set_stats変数を確認する
       ansible.builtin.debug:
-        msg: "Limit variable set to: {{ ansible_stats.limit }}"
+        msg: "Limit variable set to: {{ limit }}"
