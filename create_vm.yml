@@ -244,3 +244,9 @@
           packages:
             - yum-utils
       register: updated_instance
+
+    - name: 作成された EC2 の ホスト名をワークフローの Limit 変数へセット
+      ansible.builtin.set_stats:
+        data:
+          limit: "{{ ec2_instance.instances[0].hostname }}"
+        per_host: false # ワークフロー全体で共有するため false (デフォルト) のままにします
