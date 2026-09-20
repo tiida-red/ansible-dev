@@ -258,4 +258,4 @@
 
     - name: set_stats変数を確認する
       ansible.builtin.debug:
-        msg: "Limit variable set to: {{ target_hostname }}"
+        msg: "target_hostname variable set to: {{ target_hostname }}"
