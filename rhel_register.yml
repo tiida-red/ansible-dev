@@ -1,7 +1,7 @@
 ---
 - name: Register target RHEL server to subscription-manager and enable required repositories
 
-  hosts: {{ target_hostname }}
+  hosts: "{{ target_hostname }}"
   gather_facts: true
   become: true # root 権限で実行
   vars:
