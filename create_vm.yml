@@ -247,15 +247,15 @@
 
     - name: Set fact for limit variable based on the Name tag of the created instance
       ansible.builtin.set_fact:
-        limit: "{{ ec2_instance.instances[0].tags.Name }}"
+        target_hostname: "{{ ec2_instance.instances[0].tags.Name }}"
   
 
     - name: ワークフローの統計へLimit値をセット
       ansible.builtin.set_stats:
         data:
-          limit: "{{ limit }}"
+          target_hostname: "{{ target_hostname }}"
         per_host: false
 
     - name: set_stats変数を確認する
       ansible.builtin.debug:
-        msg: "Limit variable set to: {{ limit }}"
+        msg: "Limit variable set to: {{ target_hostname }}"
