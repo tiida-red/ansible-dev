@@ -1,6 +1,6 @@
 ---
 - name: Install and enable AWS Systems Manager Agent
-  hosts: all
+  hosts: "{{ target_hostname | default('all') }}"
   become: true
   gather_facts: true
 
