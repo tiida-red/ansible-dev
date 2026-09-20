@@ -1,6 +1,6 @@
 ---
 - name: 対象インスタンスの特定と動的インベントリ追加
-  hosts: all
+  hosts: "{{ target_hostname | default('all') }}"
   gather_facts: false
   become: true # root 権限で実行
 
