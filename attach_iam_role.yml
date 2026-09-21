@@ -1,0 +1,61 @@
+---
+- name: Attach an IAM role to an EC2 instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  vars:
+    region: us-east-2
+    target_hostname: rhel10-vm
+    iam_role: AmazonSSMManagedInstanceCore
+    iam_instance_profile: "{{ iam_role }}"
+
+  tasks:
+    - name: Find the target EC2 instance by Name tag
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+        filters:
+          "tag:Name": "{{ target_hostname }}"
+      register: target_instances
+
+    - name: Ensure exactly one target instance was found
+      ansible.builtin.assert:
+        that:
+          - target_instances.instances | length == 1
+        fail_msg: >-
+          Expected exactly one EC2 instance with Name '{{ target_hostname }}'
+          in region '{{ region }}', found {{ target_instances.instances | length }}.
+
+    - name: Verify that the IAM role exists
+      amazon.aws.iam_role_info:
+        name: "{{ iam_role }}"
+      register: iam_role_info
+
+    - name: Ensure the IAM role was found
+      ansible.builtin.assert:
+        that:
+          - iam_role_info.iam_roles | length == 1
+        fail_msg: "IAM role '{{ iam_role }}' was not found."
+
+    - name: Create or update the IAM instance profile
+      amazon.aws.iam_instance_profile:
+        name: "{{ iam_instance_profile }}"
+        role: "{{ iam_role }}"
+        state: present
+
+    - name: Attach the IAM role to the EC2 instance
+      amazon.aws.ec2_instance:
+        region: "{{ region }}"
+        instance_ids:
+          - "{{ target_instances.instances[0].instance_id }}"
+        iam_instance_profile: "{{ iam_instance_profile }}"
+        state: present
+
+    - name: Show the IAM role assignment
+      ansible.builtin.debug:
+        msg: >-
+          IAM role '{{ iam_role }}' was assigned to EC2 instance
+          '{{ target_instances.instances[0].instance_id }}'
+          ({{ target_hostname }}) in region '{{ region }}'.
