@@ -20,7 +20,7 @@
       ansible.builtin.dnf:
         name: "*"
         state: latest
-        update_cache: true
+        update_only: true
 
     # ============================================================
     # 2. Reboot必要性確認
