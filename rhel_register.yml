@@ -18,6 +18,7 @@
           --password {{ rhsm_password }}
       register: register_result
       ignore_errors: true
+      no_log: true
 
     - name: Show registration result for debugging
       ansible.builtin.debug:
