@@ -1,0 +1,49 @@
+---
+- name: List EC2 instances in the specified AWS region
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  vars:
+    region: us-east-2
+
+  tasks:
+    - name: Get EC2 instance information
+      amazon.aws.ec2_instance_info:
+        region: "{{ region }}"
+      register: ec2_info
+
+    - name: Show EC2 instance count
+      ansible.builtin.debug:
+        msg: "Found {{ ec2_info.instances | length }} EC2 instance(s) in {{ region }}."
+
+    - name: Show EC2 instance status
+      ansible.builtin.debug:
+        msg:
+          instance_id: "{{ item.instance_id }}"
+          name: "{{ item.tags.Name | default('(no Name tag)') }}"
+          state: "{{ item.state.name }}"
+          instance_type: "{{ item.instance_type }}"
+          availability_zone: "{{ item.placement.availability_zone }}"
+          private_ip: "{{ item.private_ip_address | default('') }}"
+          public_ip: "{{ item.public_ip_address | default('') }}"
+      loop: "{{ ec2_info.instances }}"
+      loop_control:
+        label: "{{ item.tags.Name | default(item.instance_id) }} ({{ item.state.name }})"
+
+    - name: Show running EC2 instance count
+      ansible.builtin.debug:
+        msg: >-
+          Found {{ ec2_info.instances | selectattr('state.name', 'equalto', 'running') | list | length }}
+          running EC2 instance(s) in {{ region }}.
+
+    - name: Show running EC2 instance name and type
+      ansible.builtin.debug:
+        msg:
+          name: "{{ item.tags.Name | default('(no Name tag)') }}"
+          instance_type: "{{ item.instance_type }}"
+      loop: "{{ ec2_info.instances | selectattr('state.name', 'equalto', 'running') | list }}"
+      loop_control:
+        label: "{{ item.tags.Name | default(item.instance_id) }} ({{ item.instance_type }})"
