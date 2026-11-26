@@ -1,0 +1,56 @@
+---
+# rhel 系 Playbook を AAP (Automation Controller) にジョブテンプレートとして登録する (Configuration as Code)
+#
+# 接続情報は Playbook に書かず、環境変数で渡します:
+#   export CONTROLLER_HOST=https://aap.example.com
+#   export CONTROLLER_USERNAME=admin
+#   export CONTROLLER_PASSWORD=...        # または CONTROLLER_OAUTH_TOKEN
+#   export CONTROLLER_VERIFY_SSL=false    # 検証環境のみ
+#
+# 実行:
+#   ansible-galaxy collection install -r cac/collections-requirements.yml
+#   ansible-playbook cac/configure_rhel_job_templates.yml
+- name: Configure RHEL job templates on AAP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - rhel_job_templates.yml
+
+  tasks:
+    - name: Ensure project exists
+      ansible.controller.project:
+        name: "{{ cac_project }}"
+        organization: "{{ cac_organization }}"
+        scm_type: git
+        scm_url: "{{ cac_project_scm_url }}"
+        scm_branch: "{{ cac_project_scm_branch }}"
+        credential: "{{ cac_project_scm_credential | default(omit, true) }}"
+        scm_update_on_launch: true
+        state: present
+      when: cac_manage_project | bool
+
+    - name: Ensure RHEL job templates exist
+      ansible.controller.job_template:
+        name: "{{ item.name }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ cac_organization }}"
+        project: "{{ cac_project }}"
+        playbook: "{{ item.playbook }}"
+        inventory: "{{ item.inventory | default(cac_inventory) }}"
+        credentials:
+          - "{{ cac_machine_credential }}"
+        execution_environment: "{{ cac_execution_environment | default(omit, true) }}"
+        job_type: "{{ item.job_type | default('run') }}"
+        become_enabled: "{{ item.become_enabled | default(false) }}"
+        verbosity: "{{ item.verbosity | default(0) }}"
+        timeout: "{{ item.timeout | default(omit) }}"
+        extra_vars: "{{ item.extra_vars | default(omit) }}"
+        ask_variables_on_launch: "{{ item.ask_variables_on_launch | default(false) }}"
+        ask_limit_on_launch: true
+        survey_enabled: "{{ item.survey_enabled | default(false) }}"
+        survey_spec: "{{ item.survey_spec | default(omit) }}"
+        state: present
+      loop: "{{ rhel_job_templates }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.playbook }})"

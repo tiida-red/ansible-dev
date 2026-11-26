@@ -6,12 +6,13 @@
 
   vars:
     region: "ap-northeast-1"
-    services_to_enable: # firewalldで許可するサービス名のリスト ["service", "service2", ...]
-      - http
-      - https
-    ports_to_open: # firewalldで許可するポート番号のリスト ["port/protocol", "port2/protocol2", ...]
-      - 8080/tcp
-      - 8443/tcp
+    # --- AAP の Survey から渡される変数 (カンマ区切りの文字列) ---
+    fw_state: enabled # enabled: 許可(open) / disabled: 削除(close)
+    fw_services: "http,https" # 例: "http,https"
+    fw_ports: "8080/tcp,8443/tcp" # 例: "8080/tcp,8443/tcp"
+    # --- 内部で使うリスト ---
+    services_to_enable: "{{ fw_services.split(',') | map('trim') | select | list }}"
+    ports_to_open: "{{ fw_ports.split(',') | map('trim') | select | list }}"
 
   tasks:
 
@@ -42,19 +43,19 @@
     # --------------------------------------------------
     # 2. Firewall ルールの設定 
     # --------------------------------------------------
-    - name: サービス名指定でポートを許可 
+    - name: サービス名指定で許可/削除
       ansible.posix.firewalld:
         service: "{{ item }}"
         permanent: true
-        state: enabled
+        state: "{{ fw_state }}"
         immediate: true
       loop: "{{ services_to_enable }}"
 
-    - name: ポート番号指定で許可 (8080/tcp, 8443/tcp)
+    - name: ポート番号指定で許可/削除
       ansible.posix.firewalld:
         port: "{{ item }}"
         permanent: true
-        state: enabled
+        state: "{{ fw_state }}"
         immediate: true
       loop: "{{ ports_to_open }}"
 

@@ -1,0 +1,5 @@
+---
+collections:
+  # ansible.controller は公開 Galaxy になく Red Hat Automation Hub から取得します
+  # (ansible.cfg に automation_hub のサーバー URL とトークンの設定が必要)
+  - name: ansible.controller

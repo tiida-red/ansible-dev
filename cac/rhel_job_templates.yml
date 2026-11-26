@@ -1,0 +1,105 @@
+---
+# rhel*.yml / rhel-*.yml の Playbook を AAP のジョブテンプレートとして登録する定義
+# 新しい rhel Playbook を追加する場合は rhel_job_templates に追記してください。
+
+# --- 共通設定 (環境に合わせて変更) ---
+cac_organization: My Org
+cac_project: My Project
+# false: 既存プロジェクトをそのまま使う (プロジェクトの作成/更新をしない)
+# true : 下の scm_* の設定でプロジェクトを作成/更新する
+cac_manage_project: false
+cac_project_scm_url: https://github.com/tiida-red/ansible-dev.git
+cac_project_scm_branch: main
+# 事前に AAP 上に作成済みの Source Control 認証情報 (プライベートリポジトリ用)
+cac_project_scm_credential: ""
+cac_inventory: my inventory
+cac_machine_credential: RHEL
+cac_execution_environment: ""  # 空の場合は組織/既定の EE を使用
+
+rhel_job_templates:
+  - name: RHEL - Register Subscription
+    playbook: rhel_register.yml
+    description: subscription-manager でシステムを登録する
+    become_enabled: true
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: RHSM registration
+      description: Red Hat Subscription Manager の認証情報
+      spec:
+        - question_name: RHSM ユーザー名
+          variable: rhsm_username
+          type: text
+          required: true
+        - question_name: RHSM パスワード
+          variable: rhsm_password
+          type: password
+          required: true
+
+  - name: RHEL - Firewall
+    playbook: rhel-firewall.yml
+    description: firewalld のサービス/ポートの許可(open)・削除(close)
+    become_enabled: true
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: Firewall settings
+      description: 許可または削除するサービスとポート
+      spec:
+        - question_name: 操作
+          question_description: enabled=許可(open) / disabled=削除(close)
+          variable: fw_state
+          type: multiplechoice
+          required: true
+          default: enabled
+          choices:
+            - enabled
+            - disabled
+        - question_name: サービス名 (カンマ区切り)
+          question_description: 例 http,https  (不要なら空欄)
+          variable: fw_services
+          type: text
+          required: false
+          default: "http,https"
+        - question_name: ポート (カンマ区切り)
+          question_description: 例 8080/tcp,8443/tcp  (不要なら空欄)
+          variable: fw_ports
+          type: text
+          required: false
+          default: "8080/tcp,8443/tcp"
+
+  - name: RHEL - Install Package
+    playbook: rhel-install_package.yml
+    description: パッケージのインストール/削除
+    become_enabled: true
+    survey_enabled: true
+    survey_spec:
+      name: Package install
+      description: 対象パッケージと状態
+      spec:
+        - question_name: 対象パッケージ
+          variable: target_package
+          type: text
+          required: true
+          default: bash
+        - question_name: 状態
+          variable: package_state
+          type: multiplechoice
+          required: true
+          default: present
+          choices:
+            - present
+            - absent
+
+  - name: RHEL - SSM Agent
+    playbook: rhel-ssm-agent.yml
+    description: AWS Systems Manager Agent のインストールと有効化
+    become_enabled: true
+    ask_variables_on_launch: true
+
+  - name: RHEL - Update and Reboot
+    playbook: rhel-update.yml
+    description: OS パッチ適用と必要時の再起動
+    become_enabled: true
+    ask_variables_on_launch: true
+    timeout: 3600
