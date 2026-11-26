@@ -108,6 +108,15 @@ rhel_job_templates:
       name: Update options
       description: 更新範囲と対象パッケージ
       spec:
+        - question_name: 実行モード
+          question_description: apply=更新を実行 / check=更新の有無を確認するだけ(何も変更しない・再起動もしない)
+          variable: update_mode
+          type: multiplechoice
+          required: true
+          default: apply
+          choices:
+            - apply
+            - check
         - question_name: 更新範囲
           question_description: all=すべての更新 / security=セキュリティ更新のみ
           variable: update_scope

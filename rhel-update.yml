@@ -7,6 +7,7 @@
     region: "ap-northeast-1"
     reboot_after_patch: true # OSパッチ適用後に再起動するか
     # --- AAP の Survey から渡される変数 ---
+    update_mode: apply # apply: 更新を実行 / check: 更新の有無を確認するだけ (何も変更しない)
     update_scope: all # all: すべての更新 / security: セキュリティ更新のみ
     update_packages: "" # 空: すべて / カンマ区切りで指定: 指定パッケージのみ (例: "kernel,openssl")
     # --- 内部で使うリスト ---
@@ -16,21 +17,51 @@
   tasks:
     - name: inventoryで登録されているホスト一覧を取得
       ansible.builtin.debug:
-        msg: "対象ホスト: {{ inventory_hostname }} のパッケージを最新に更新します"
+        msg: "対象ホスト: {{ inventory_hostname }} のパッケージを{{ '最新に更新します' if update_mode == 'apply' else '確認します (更新はしません)' }}"
 
     # --------------------------------------------------
     # 1. OS パッチの最新化
     # --------------------------------------------------
-    - name: update_scope の値を検証
+    - name: update_scope と update_mode の値を検証
       ansible.builtin.assert:
-        that: update_scope in ['all', 'security']
-        fail_msg: "update_scope は all / security のいずれかを指定してください (現在: {{ update_scope }})"
+        that:
+          - update_scope in ['all', 'security']
+          - update_mode in ['apply', 'check']
+        fail_msg: "update_scope は all / security、update_mode は apply / check を指定してください (現在: {{ update_scope }} / {{ update_mode }})"
 
     - name: 更新内容を表示
       ansible.builtin.debug:
         msg:
+          - "モード : {{ update_mode }}"
           - "更新範囲 : {{ update_scope }}"
           - "対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+
+    # --- 確認のみ (update_mode=check): 更新の有無を調べるだけで、何も変更しない ---
+    # dnf check-update の終了コード: 100=更新あり / 0=更新なし / 1=エラー
+    - name: 更新の有無を確認 (変更なし)
+      ansible.builtin.command:
+        argv: >-
+          {{ ['dnf', '-q', 'check-update']
+          + (['--security'] if update_scope == 'security' else [])
+          + update_package_list }}
+      register: check_update
+      changed_when: false
+      failed_when: check_update.rc not in [0, 100]
+      when: update_mode == 'check'
+
+    - name: 更新の確認結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "Host : {{ inventory_hostname }}"
+          - "更新範囲 : {{ update_scope }} / 対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+          - "更新 : {{ '%d 件あり' % available_updates | length if available_updates | length > 0 else 'なし' }}"
+          - "{{ available_updates }}"
+      vars:
+        available_updates: >-
+          {{ check_update.stdout_lines
+          | select('match', '^\S+\.(x86_64|noarch|aarch64|i686|s390x|ppc64le)\s')
+          | map('split') | map('join', ' ') | list }}
+      when: update_mode == 'check'
 
     # update_scope=security なら security: true、update_packages 指定ありならその名前だけを対象にする
     - name: パッケージを最新化 (OSパッチ適用)
@@ -39,6 +70,7 @@
         state: latest
         update_only: true
         security: "{{ update_scope == 'security' }}"
+      when: update_mode == 'apply'
 
     # ============================================================
     # 2. Reboot必要性確認
@@ -49,10 +81,12 @@
       register: reboot_check
       changed_when: false
       failed_when: false
+      when: update_mode == 'apply'
 
     - name: Set reboot required
       ansible.builtin.set_fact:
         reboot_required: "{{ reboot_check.rc != 0 }}"
+      when: update_mode == 'apply'
 
     - name: Show reboot requirement
       ansible.builtin.debug:
@@ -62,13 +96,15 @@
           - "Host : {{ inventory_hostname }}"
           - "Reboot Required : {{ reboot_required }}"
           - "=========================================="
-  
+      when: update_mode == 'apply'
+
     - name: Reboot server 
       ansible.builtin.reboot:
         reboot_timeout: "{{ reboot_timeout }}"
         test_command: whoami
         msg: "Reboot requested by Ansible RHEL patch Playbook"
       when:
+        - update_mode == 'apply'
         - reboot_after_patch | bool
         - reboot_required | bool
   
