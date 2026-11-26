@@ -1,95 +1,111 @@
 ---
-- name: Search installed packages (and optionally check CVE) on RHEL hosts
+- name: Search installed packages and/or check CVE on RHEL hosts
   hosts: "{{ target_hostname | default('all') }}"
   gather_facts: false
   become: true # rpm / dnf updateinfo の参照に使用 (システムは変更しません)
 
   vars:
-    # --- AAP の Survey から渡される変数 ---
-    search_packages: "php*" # カンマ区切りで複数指定可。* でワイルドカード (例: "php*,httpd*")
-    cve_ids: "" # 任意。カンマ区切りで複数指定可 (例: "CVE-2024-1234,CVE-2024-5678")
+    # --- AAP の Survey から渡される変数 (どちらも任意。両方空はエラー) ---
+    search_packages: "" # カンマ区切りで複数指定可。* でワイルドカード (例: "php*,httpd*")
+    cve_ids: "" # カンマ区切りで複数指定可 (例: "CVE-2024-1234,CVE-2024-5678")
     # --- 内部で使うリスト ---
     search_package_list: "{{ search_packages.split(',') | map('trim') | select | list }}"
     cve_list: "{{ cve_ids.split(',') | map('trim') | select | list }}"
 
   tasks:
-    - name: Ensure search_packages is specified
+    - name: Ensure at least one of search_packages or cve_ids is specified
       ansible.builtin.assert:
-        that: search_package_list | length > 0
-        fail_msg: "search_packages にパッケージ名 (例: php*) を指定してください。"
+        that: (search_package_list | length > 0) or (cve_list | length > 0)
+        fail_msg: "search_packages (例: php*) か cve_ids (例: CVE-2024-1234) の少なくとも一方を指定してください。"
       run_once: true # noqa: run-once[task]
 
     # --------------------------------------------------
-    # 1. パターンに一致するインストール済みパッケージを取得 (参照のみ)
+    # 1. パッケージ検索 (search_packages 指定時のみ。参照のみ)
     # --------------------------------------------------
     - name: インストール済みパッケージを検索
       ansible.builtin.command:
         argv: "{{ ['rpm', '-qa', '--qf', '%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\\n'] + search_package_list }}"
       register: rpm_result
       changed_when: false
+      when: search_package_list | length > 0
 
     - name: 一致したパッケージを整理
       ansible.builtin.set_fact:
-        found_packages: "{{ rpm_result.stdout_lines | map('trim') | select | sort | list }}"
+        found_packages: "{{ rpm_result.stdout_lines | default([]) | map('trim') | select | sort | list }}"
 
     # --------------------------------------------------
-    # 2. (任意) 指定 CVE が未修正のパッケージを確認 (参照のみ)
+    # 2. CVE チェック (cve_ids 指定時のみ。パッケージ検索とは独立。参照のみ)
     # --------------------------------------------------
     - name: 指定 CVE の未適用アドバイザリを取得
       ansible.builtin.command: "dnf -q updateinfo list --cve {{ item }}"
       loop: "{{ cve_list }}"
       register: cve_result
       changed_when: false
-      failed_when: false
-      when:
-        - cve_list | length > 0
-        - found_packages | length > 0
+      failed_when: false # 失敗しても止めず、下でエラーとして表示する
 
-    - name: CVE の該当行を整理
+    - name: CVE の該当行とエラーを整理
       ansible.builtin.set_fact:
         cve_findings: >-
           {{ cve_result.results | default([])
-          | rejectattr('skipped', 'defined')
           | map(attribute='stdout_lines') | flatten
           | map('trim') | select | unique | sort | list }}
+        cve_errors: >-
+          {{ cve_result.results | default([])
+          | rejectattr('rc', 'equalto', 0)
+          | map(attribute='item') | list }}
+
+    - name: CVE チェックのエラー詳細を表示
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: rc={{ item.rc }} {{ item.stderr | default('') }}"
+      loop: "{{ cve_result.results | default([]) | rejectattr('rc', 'equalto', 0) | list }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     # --------------------------------------------------
     # 3. ホストごとの結果
     # --------------------------------------------------
-    - name: ホストごとの検索結果を表示
+    - name: ホストごとの結果を表示
       ansible.builtin.debug:
-        msg:
-          - "Host : {{ inventory_hostname }}"
-          - "検索パターン : {{ search_package_list | join(', ') }}"
-          - "一致したパッケージ : {{ found_packages if found_packages | length > 0 else '(なし)' }}"
-          - "CVE 未適用 : {{ (cve_findings if cve_findings | length > 0 else '(なし)') if cve_list | length > 0 else '(CVE 指定なし)' }}"
+        msg: >-
+          {{ ['Host : ' ~ inventory_hostname]
+          + (['パッケージ検索 [' ~ search_package_list | join(', ') ~ '] : '
+              ~ (found_packages if found_packages | length > 0 else '(該当なし)')]
+             if search_package_list | length > 0 else [])
+          + (['CVE [' ~ cve_list | join(', ') ~ '] 未適用 : '
+              ~ (cve_findings if cve_findings | length > 0 else '(なし)')
+              ~ (' ※エラー: ' ~ cve_errors | join(', ') if cve_errors | length > 0 else '')]
+             if cve_list | length > 0 else []) }}
 
     # --------------------------------------------------
     # 4. 全ホストの集計 (1回だけ実行)
     # --------------------------------------------------
-    - name: 該当ホストを集計
+    - name: パッケージが見つかったホストを集計
       ansible.builtin.set_fact:
-        summary_hit: "{{ summary_hit | default([]) + [item] }}"
+        summary_pkg_hit: "{{ summary_pkg_hit | default([]) + [item] }}"
       loop: "{{ ansible_play_hosts }}"
       run_once: true # noqa: run-once[task]
       when: hostvars[item].found_packages | default([]) | length > 0
 
-    - name: 該当なしホストを集計
+    - name: CVE が未適用のホストを集計
       ansible.builtin.set_fact:
-        summary_none: "{{ summary_none | default([]) + [item] }}"
+        summary_cve_hit: "{{ summary_cve_hit | default([]) + [item] }}"
       loop: "{{ ansible_play_hosts }}"
       run_once: true # noqa: run-once[task]
-      when: hostvars[item].found_packages | default([]) | length == 0
+      when: hostvars[item].cve_findings | default([]) | length > 0
 
-    - name: 集計結果 - 該当あり
+    - name: 集計結果 - パッケージが見つかったホスト
       ansible.builtin.debug:
         msg: "{{ item }}: {{ hostvars[item].found_packages | join(', ') }}"
-      loop: "{{ summary_hit | default([]) }}"
+      loop: "{{ summary_pkg_hit | default([]) }}"
       run_once: true # noqa: run-once[task]
 
     - name: 集計結果 - 件数
       ansible.builtin.debug:
-        msg:
-          - "該当あり: {{ summary_hit | default([]) | length }} 台 {{ summary_hit | default([]) }}"
-          - "該当なし: {{ summary_none | default([]) | length }} 台 {{ summary_none | default([]) }}"
+        msg: >-
+          {{ (['パッケージ検索: 該当あり ' ~ summary_pkg_hit | default([]) | length ~ ' 台 '
+               ~ summary_pkg_hit | default([]) ~ ' / 全 ' ~ ansible_play_hosts | length ~ ' 台']
+              if search_package_list | length > 0 else [])
+          + (['CVE: 未適用あり ' ~ summary_cve_hit | default([]) | length ~ ' 台 '
+              ~ summary_cve_hit | default([]) ~ ' / 全 ' ~ ansible_play_hosts | length ~ ' 台']
+              if cve_list | length > 0 else []) }}
       run_once: true # noqa: run-once[task]
