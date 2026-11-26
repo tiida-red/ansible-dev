@@ -133,3 +133,25 @@ rhel_job_templates:
             - "true"
             - "false"
     timeout: 3600
+
+  - name: RHEL - Package Search
+    playbook: rhel-package-search.yml
+    description: パッケージ名(ワイルドカード可)でインストール済みのホストを抽出。任意で CVE の未適用も確認 (参照のみ)
+    become_enabled: true
+    survey_enabled: true
+    survey_spec:
+      name: Package search
+      description: 検索するパッケージと CVE
+      spec:
+        - question_name: パッケージ名 (カンマ区切り、* 使用可)
+          question_description: 例 php*  /  php*,httpd*
+          variable: search_packages
+          type: text
+          required: true
+          default: "php*"
+        - question_name: CVE 番号 (任意・カンマ区切り)
+          question_description: 例 CVE-2024-1234  (空欄なら CVE チェックなし)
+          variable: cve_ids
+          type: text
+          required: false
+          default: ""
