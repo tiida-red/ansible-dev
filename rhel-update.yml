@@ -36,7 +36,7 @@
           - "更新範囲 : {{ update_scope }}"
           - "対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
 
-    # --- 確認のみ (update_mode=check): 更新の有無を調べるだけで、何も変更しない ---
+    # --- 確認のみ (update_mode=check): 更新の有無と対応する CVE を調べるだけで、何も変更しない ---
     # dnf check-update の終了コード: 100=更新あり / 0=更新なし / 1=エラー
     - name: 更新の有無を確認 (変更なし)
       ansible.builtin.command:
@@ -49,18 +49,58 @@
       failed_when: check_update.rc not in [0, 100]
       when: update_mode == 'check'
 
+    # 未適用の CVE とパッケージの対応 (dnf updateinfo list cves: "CVE-xxxx 重要度 パッケージ(NEVRA)")
+    - name: 未適用 CVE の一覧を取得 (変更なし)
+      ansible.builtin.command: dnf -q updateinfo list cves
+      register: cve_updateinfo
+      changed_when: false
+      failed_when: false
+      when: update_mode == 'check'
+
+    - name: 更新対象パッケージと CVE を突き合わせ
+      ansible.builtin.set_fact:
+        available_updates: >-
+          {{ check_update.stdout_lines
+          | select('match', '^\S+\.(x86_64|noarch|aarch64|i686|s390x|ppc64le)\s')
+          | map('split') | list }}
+        cve_entries: >-
+          {%- set ns = namespace(items=[]) -%}
+          {%- for line in cve_updateinfo.stdout_lines | default([]) -%}
+          {%- set f = line.split() -%}
+          {%- if f | length >= 3 and f[0] is match('^CVE-') -%}
+          {%- set pkg = f[2] | regex_replace('\.[^.]+$', '') | regex_replace('-[^-]+-[^-]+$', '') -%}
+          {%- set ns.items = ns.items + [{'cve': f[0], 'severity': f[1], 'package': pkg}] -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ ns.items }}
+      when: update_mode == 'check'
+
+    - name: 更新対象ごとの CVE を整理
+      ansible.builtin.set_fact:
+        update_report: >-
+          {%- set ns = namespace(lines=[]) -%}
+          {%- for u in available_updates -%}
+          {%- set name = u[0] | regex_replace('\.[^.]+$', '') -%}
+          {%- set hits = cve_entries | selectattr('package', 'equalto', name) | list -%}
+          {%- set cves = hits | map(attribute='cve') | unique | sort | list -%}
+          {%- set label = (cves | join(', ')) if cves | length > 0 else '-' -%}
+          {%- set ns.lines = ns.lines + [u[0] ~ ' ' ~ u[1] ~ ' | CVE: ' ~ label] -%}
+          {%- endfor -%}
+          {{ ns.lines }}
+        updates_with_cve: >-
+          {{ available_updates
+          | map('first') | map('regex_replace', '\.[^.]+$', '')
+          | select('in', cve_entries | map(attribute='package') | list) | list | length }}
+      when: update_mode == 'check'
+
     - name: 更新の確認結果を表示
       ansible.builtin.debug:
         msg:
           - "Host : {{ inventory_hostname }}"
           - "更新範囲 : {{ update_scope }} / 対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
-          - "更新 : {{ '%d 件あり' % available_updates | length if available_updates | length > 0 else 'なし' }}"
-          - "{{ available_updates }}"
-      vars:
-        available_updates: >-
-          {{ check_update.stdout_lines
-          | select('match', '^\S+\.(x86_64|noarch|aarch64|i686|s390x|ppc64le)\s')
-          | map('split') | map('join', ' ') | list }}
+          - "更新 : {{ available_updates | length }} 件あり (うち CVE 未適用あり: {{ updates_with_cve }} 件)"
+          - "{{ update_report }}"
+          - "{{ '※ CVE 情報の取得に失敗しました (rc=' ~ cve_updateinfo.rc ~ '): ' ~ cve_updateinfo.stderr | default('') ~ ' → CVE 欄の - は「なし」ではなく「不明」です' if cve_updateinfo.rc != 0 else 'CVE 情報: 取得済み (CVE 欄の - は未適用 CVE なし)' }}"
       when: update_mode == 'check'
 
     # update_scope=security なら security: true、update_packages 指定ありならその名前だけを対象にする
