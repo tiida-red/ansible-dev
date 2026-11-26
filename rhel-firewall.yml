@@ -7,7 +7,7 @@
   vars:
     region: "ap-northeast-1"
     # --- AAP の Survey から渡される変数 (カンマ区切りの文字列) ---
-    fw_state: enabled # enabled: 許可(open) / disabled: 削除(close)
+    fw_state: enabled # enabled: 許可(open) / disabled: 削除(close) / status: 現状確認のみ(変更しない)
     fw_services: "http,https" # 例: "http,https"
     fw_ports: "8080/tcp,8443/tcp" # 例: "8080/tcp,8443/tcp"
     # --- 内部で使うリスト ---
@@ -15,59 +15,83 @@
     ports_to_open: "{{ fw_ports.split(',') | map('trim') | select | list }}"
 
   tasks:
+    - name: fw_state の値を検証
+      ansible.builtin.assert:
+        that: fw_state in ['enabled', 'disabled', 'status']
+        fail_msg: "fw_state は enabled / disabled / status のいずれかを指定してください (現在: {{ fw_state }})"
 
-    # --------------------------------------------------
-    # 1. firewalld サービスの有効化と起動
-    # --------------------------------------------------
-    - name: firewalld パッケージのインストール確認
-      ansible.builtin.dnf:
-        name: firewalld
-        state: present
+    # ==================================================
+    # 変更モード (enabled / disabled)
+    # ==================================================
+    - name: firewalld の設定変更
+      when: fw_state in ['enabled', 'disabled']
+      block:
+        # --------------------------------------------------
+        # 1. firewalld サービスの有効化と起動
+        # --------------------------------------------------
+        - name: firewalld パッケージのインストール確認
+          ansible.builtin.dnf:
+            name: firewalld
+            state: present
 
-    - name: firewalld サービスの起動と自動起動設定
-      ansible.builtin.systemd:
-        name: firewalld
-        state: started
-        enabled: true
+        - name: firewalld サービスの起動と自動起動設定
+          ansible.builtin.systemd:
+            name: firewalld
+            state: started
+            enabled: true
 
-    # 【重要】firewalld サービスが完全に応答可能になるまで待機
-    - name: firewalld が完全起動して応答するまで待機
+        # 【重要】firewalld サービスが完全に応答可能になるまで待機
+        - name: firewalld が完全起動して応答するまで待機
+          ansible.builtin.command: firewall-cmd --state
+          register: firewall_state
+          until: firewall_state.stdout == "running"
+          retries: 5
+          delay: 2
+          changed_when: false
+          failed_when: false # 起動途中の rc != 0 で失敗させないための設定
+
+        # --------------------------------------------------
+        # 2. Firewall ルールの設定
+        # --------------------------------------------------
+        - name: サービス名指定で許可/削除
+          ansible.posix.firewalld:
+            service: "{{ item }}"
+            permanent: true
+            state: "{{ fw_state }}"
+            immediate: true
+          loop: "{{ services_to_enable }}"
+
+        - name: ポート番号指定で許可/削除
+          ansible.posix.firewalld:
+            port: "{{ item }}"
+            permanent: true
+            state: "{{ fw_state }}"
+            immediate: true
+          loop: "{{ ports_to_open }}"
+
+        - name: 設定を反映するために firewalld をリロード
+          ansible.builtin.systemd:
+            name: firewalld
+            state: reloaded
+
+    # ==================================================
+    # 現状確認 (全モード共通。status の場合はこれだけを実行し、何も変更しない)
+    # ==================================================
+    - name: firewalld の稼働状態を確認
       ansible.builtin.command: firewall-cmd --state
-      register: firewall_state
-      until: firewall_state.stdout == "running"
-      retries: 5
-      delay: 2
+      register: fw_running
       changed_when: false
-      failed_when: false # 起動途中の rc != 0 で失敗させないための設定
+      failed_when: false
 
-    # --------------------------------------------------
-    # 2. Firewall ルールの設定 
-    # --------------------------------------------------
-    - name: サービス名指定で許可/削除
-      ansible.posix.firewalld:
-        service: "{{ item }}"
-        permanent: true
-        state: "{{ fw_state }}"
-        immediate: true
-      loop: "{{ services_to_enable }}"
-
-    - name: ポート番号指定で許可/削除
-      ansible.posix.firewalld:
-        port: "{{ item }}"
-        permanent: true
-        state: "{{ fw_state }}"
-        immediate: true
-      loop: "{{ ports_to_open }}"
-
-    - name: 設定を反映するために firewalld をリロード
-      ansible.builtin.systemd:
-        name: firewalld
-        state: reloaded
-
-    - name: 現在の firewalld 設定を表示 (デバッグ用)
-      ansible.builtin.command: firewall-cmd --list-all
+    - name: 現在の firewalld 設定を取得
+      ansible.builtin.command: "firewall-cmd --list-all"
       register: firewall_config
       changed_when: false
-    - name: Show current firewalld configuration for debugging
+      when: fw_running.rc == 0
+
+    - name: Show current firewalld configuration
       ansible.builtin.debug:
-        msg: "Current firewalld configuration: {{ firewall_config.stdout }}"
+        msg: >-
+          {{ 'Current firewalld configuration: ' ~ firewall_config.stdout
+          if fw_running.rc == 0
+          else 'firewalld is not running or not installed (' ~ (fw_running.stderr | default(fw_running.msg | default('unknown'))) ~ ')' }}

@@ -47,7 +47,7 @@ rhel_job_templates:
       description: 許可または削除するサービスとポート
       spec:
         - question_name: 操作
-          question_description: enabled=許可(open) / disabled=削除(close)
+          question_description: enabled=許可(open) / disabled=削除(close) / status=現状確認のみ(変更しない)
           variable: fw_state
           type: multiplechoice
           required: true
@@ -55,6 +55,7 @@ rhel_job_templates:
           choices:
             - enabled
             - disabled
+            - status
         - question_name: サービス名 (カンマ区切り)
           question_description: 例 http,https  (不要なら空欄)
           variable: fw_services
