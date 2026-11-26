@@ -103,4 +103,33 @@ rhel_job_templates:
     description: OS パッチ適用と必要時の再起動
     become_enabled: true
     ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: Update options
+      description: 更新範囲と対象パッケージ
+      spec:
+        - question_name: 更新範囲
+          question_description: all=すべての更新 / security=セキュリティ更新のみ
+          variable: update_scope
+          type: multiplechoice
+          required: true
+          default: all
+          choices:
+            - all
+            - security
+        - question_name: 対象パッケージ (カンマ区切り)
+          question_description: 空欄=すべて / 例 kernel,openssl (指定したものだけ更新)
+          variable: update_packages
+          type: text
+          required: false
+          default: ""
+        - question_name: 更新後に再起動する
+          question_description: 再起動が必要な場合のみ実際に再起動します
+          variable: reboot_after_patch
+          type: multiplechoice
+          required: true
+          default: "true"
+          choices:
+            - "true"
+            - "false"
     timeout: 3600

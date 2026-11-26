@@ -6,6 +6,11 @@
   vars:
     region: "ap-northeast-1"
     reboot_after_patch: true # OSパッチ適用後に再起動するか
+    # --- AAP の Survey から渡される変数 ---
+    update_scope: all # all: すべての更新 / security: セキュリティ更新のみ
+    update_packages: "" # 空: すべて / カンマ区切りで指定: 指定パッケージのみ (例: "kernel,openssl")
+    # --- 内部で使うリスト ---
+    update_package_list: "{{ update_packages.split(',') | map('trim') | select | list }}"
     reboot_timeout: 600
 
   tasks:
@@ -16,11 +21,24 @@
     # --------------------------------------------------
     # 1. OS パッチの最新化
     # --------------------------------------------------
-    - name: すべてのパッケージを最新化 (OSパッチ適用)
+    - name: update_scope の値を検証
+      ansible.builtin.assert:
+        that: update_scope in ['all', 'security']
+        fail_msg: "update_scope は all / security のいずれかを指定してください (現在: {{ update_scope }})"
+
+    - name: 更新内容を表示
+      ansible.builtin.debug:
+        msg:
+          - "更新範囲 : {{ update_scope }}"
+          - "対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+
+    # update_scope=security なら security: true、update_packages 指定ありならその名前だけを対象にする
+    - name: パッケージを最新化 (OSパッチ適用)
       ansible.builtin.dnf:
-        name: "*"
+        name: "{{ update_package_list if update_package_list | length > 0 else '*' }}"
         state: latest
         update_only: true
+        security: "{{ update_scope == 'security' }}"
 
     # ============================================================
     # 2. Reboot必要性確認
