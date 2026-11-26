@@ -40,7 +40,6 @@ rhel_job_templates:
     playbook: rhel-firewall.yml
     description: firewalld のサービス/ポートの許可(open)・削除(close)
     become_enabled: true
-    ask_variables_on_launch: true
     survey_enabled: true
     survey_spec:
       name: Firewall settings
@@ -102,7 +101,6 @@ rhel_job_templates:
     playbook: rhel-update.yml
     description: OS パッチ適用と必要時の再起動
     become_enabled: true
-    ask_variables_on_launch: true
     survey_enabled: true
     survey_spec:
       name: Update options
