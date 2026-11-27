@@ -20,7 +20,7 @@ cac_execution_environment: ""  # 空の場合は組織/既定の EE を使用
 # 非公開のリポジトリを指定すること (レポートにはホスト名や CVE の状況が含まれる)
 cac_report_git_repo: "https://github.com/tiida-red/ansible-update-reports.git"  # 例: https://github.com/<org>/<非公開リポジトリ>.git
 # Git のトークンを入れた AAP の認証情報 (種類: Report Git Token) の名前。AAP の画面で作成する
-cac_report_credential: ""
+cac_report_credential: "report-git-token"
 
 # --- OS 別アップデート用ジョブテンプレートとワークフローで共通の Survey ---
 update_survey: &update_survey
