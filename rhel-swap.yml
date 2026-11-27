@@ -1,0 +1,85 @@
+---
+- name: Create swap file and persist it in /etc/fstab
+  hosts: "{{ target_hostname | default('all') }}"
+  gather_facts: false
+  become: true
+
+  vars:
+    # --- AAP の Survey から渡される変数 ---
+    swap_size_mb: 2048 # スワップファイルのサイズ (MB)
+    swap_file: /swapfile
+
+  tasks:
+    - name: Validate swap_size_mb
+      ansible.builtin.assert:
+        that:
+          - swap_size_mb | int >= 256
+          - swap_size_mb | int <= 32768
+        fail_msg: "swap_size_mb は 256〜32768 (MB) の範囲で指定してください (現在: {{ swap_size_mb }})"
+
+    - name: Show current memory and swap
+      ansible.builtin.command: free -m
+      register: free_before
+      changed_when: false
+
+    - name: Check whether the swap file already exists
+      ansible.builtin.stat:
+        path: "{{ swap_file }}"
+      register: swap_stat
+
+    # 既存ファイルがある場合は作り直さない (サイズ違いは変更しない)
+    - name: Create the swap file
+      ansible.builtin.command:
+        cmd: "dd if=/dev/zero of={{ swap_file }} bs=1M count={{ swap_size_mb | int }} status=none"
+        creates: "{{ swap_file }}"
+
+    - name: Set swap file permissions
+      ansible.builtin.file:
+        path: "{{ swap_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Check whether the file is already formatted as swap
+      ansible.builtin.command: "blkid -o value -s TYPE {{ swap_file }}"
+      register: swap_type
+      changed_when: false
+      failed_when: false # 未フォーマットだと rc=2
+
+    - name: Format the file as swap
+      ansible.builtin.command: "mkswap {{ swap_file }}"
+      changed_when: true
+      when: swap_type.stdout | trim != 'swap'
+
+    - name: Check whether the swap file is already active
+      ansible.builtin.command: swapon --noheadings --show=NAME
+      register: swap_active
+      changed_when: false
+
+    - name: Enable the swap file
+      ansible.builtin.command: "swapon {{ swap_file }}"
+      changed_when: true
+      when: swap_file not in swap_active.stdout_lines | map('trim') | list
+
+    # 再起動後も有効にするため /etc/fstab に登録 (すでにあれば変更なし)
+    - name: Persist the swap file in /etc/fstab
+      ansible.posix.mount:
+        path: none
+        src: "{{ swap_file }}"
+        fstype: swap
+        opts: sw
+        passno: "0"
+        dump: "0"
+        state: present
+
+    - name: Show memory and swap after the change
+      ansible.builtin.command: free -m
+      register: free_after
+      changed_when: false
+
+    - name: Show result
+      ansible.builtin.debug:
+        msg:
+          - "Host : {{ inventory_hostname }}"
+          - "Before : {{ free_before.stdout_lines }}"
+          - "After  : {{ free_after.stdout_lines }}"

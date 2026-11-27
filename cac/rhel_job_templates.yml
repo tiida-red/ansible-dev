@@ -162,3 +162,21 @@ rhel_job_templates:
           type: text
           required: false
           default: ""
+
+  - name: RHEL - Add Swap
+    playbook: rhel-swap.yml
+    description: スワップファイルを作成して有効化し、/etc/fstab に登録する (再実行しても安全)
+    become_enabled: true
+    survey_enabled: true
+    survey_spec:
+      name: Swap settings
+      description: スワップファイルの設定
+      spec:
+        - question_name: スワップサイズ (MB)
+          question_description: 既定 2048。/swapfile が既にある場合はサイズを変更しません。
+          variable: swap_size_mb
+          type: integer
+          required: true
+          default: 2048
+          min: 256
+          max: 32768
