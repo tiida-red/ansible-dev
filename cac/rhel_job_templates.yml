@@ -16,6 +16,67 @@ cac_inventory: my inventory
 cac_machine_credential: RHEL
 cac_execution_environment: ""  # 空の場合は組織/既定の EE を使用
 
+# --- OS 別アップデート用ジョブテンプレートとワークフローで共通の Survey ---
+update_survey: &update_survey
+  name: Update options
+  description: 対象 OS・実行モード・更新範囲・対象パッケージ
+  spec:
+    - question_name: 対象 OS
+      question_description: all=すべて / それ以外は選んだ OS のホストだけを処理 (他の OS のホストはスキップ)
+      variable: target_os
+      type: multiplechoice
+      required: true
+      default: all
+      choices:
+        - all
+        - rhel
+        - sles
+        - ubuntu
+    - question_name: 実行モード
+      question_description: apply=更新を実行 / check=更新の有無を確認するだけ(何も変更しない・再起動もしない)
+      variable: update_mode
+      type: multiplechoice
+      required: true
+      default: apply
+      choices:
+        - apply
+        - check
+    - question_name: 更新範囲
+      question_description: all=すべての更新 / security=セキュリティ更新のみ
+      variable: update_scope
+      type: multiplechoice
+      required: true
+      default: all
+      choices:
+        - all
+        - security
+    - question_name: 対象パッケージ (カンマ区切り)
+      question_description: 空欄=すべて / 例 kernel,openssl。SLES では update_scope=security と同時に指定できません
+      variable: update_packages
+      type: text
+      required: false
+      default: ""
+    - question_name: 更新後に再起動する
+      question_description: 再起動が必要な場合のみ実際に再起動します
+      variable: reboot_after_patch
+      type: multiplechoice
+      required: true
+      default: "true"
+      choices:
+        - "true"
+        - "false"
+
+# --- ワークフロー: 3 つの OS 別テンプレートを順に実行する (自分の OS 以外のホストは各テンプレートがスキップ) ---
+update_workflows:
+  - name: Update - All distributions
+    description: RHEL 系 → SLES → Ubuntu の順に更新を実行/確認する。Survey の「対象 OS」で OS を選べる
+    survey_spec: *update_survey
+    # 実行順 (前のジョブが失敗しても次へ進む)
+    order:
+      - RHEL - Update and Reboot
+      - SLES - Update and Reboot
+      - Ubuntu - Update and Reboot
+
 rhel_job_templates:
   - name: RHEL - Register Subscription
     playbook: rhel_register.yml
@@ -99,46 +160,26 @@ rhel_job_templates:
 
   - name: RHEL - Update and Reboot
     playbook: rhel-update.yml
-    description: OS パッチ適用と必要時の再起動
+    description: OS パッチ適用と必要時の再起動 (dnf を使う OS 用。それ以外のホストはスキップ)
     become_enabled: true
     survey_enabled: true
-    survey_spec:
-      name: Update options
-      description: 更新範囲と対象パッケージ
-      spec:
-        - question_name: 実行モード
-          question_description: apply=更新を実行 / check=更新の有無を確認するだけ(何も変更しない・再起動もしない)
-          variable: update_mode
-          type: multiplechoice
-          required: true
-          default: apply
-          choices:
-            - apply
-            - check
-        - question_name: 更新範囲
-          question_description: all=すべての更新 / security=セキュリティ更新のみ
-          variable: update_scope
-          type: multiplechoice
-          required: true
-          default: all
-          choices:
-            - all
-            - security
-        - question_name: 対象パッケージ (カンマ区切り)
-          question_description: 空欄=すべて / 例 kernel,openssl (指定したものだけ更新)
-          variable: update_packages
-          type: text
-          required: false
-          default: ""
-        - question_name: 更新後に再起動する
-          question_description: 再起動が必要な場合のみ実際に再起動します
-          variable: reboot_after_patch
-          type: multiplechoice
-          required: true
-          default: "true"
-          choices:
-            - "true"
-            - "false"
+    survey_spec: *update_survey
+    timeout: 3600
+
+  - name: SLES - Update and Reboot
+    playbook: sles-update.yml
+    description: SLES のパッチ適用と必要時の再起動 (zypper を使う OS 用。それ以外のホストはスキップ)
+    become_enabled: true
+    survey_enabled: true
+    survey_spec: *update_survey
+    timeout: 3600
+
+  - name: Ubuntu - Update and Reboot
+    playbook: ubuntu-update.yml
+    description: Ubuntu の更新適用と必要時の再起動 (apt を使う OS 用。それ以外のホストはスキップ)
+    become_enabled: true
+    survey_enabled: true
+    survey_spec: *update_survey
     timeout: 3600
 
   - name: RHEL - Package Search

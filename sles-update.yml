@@ -1,0 +1,166 @@
+---
+- name: SLES Update and Reboot Playbook
+  hosts: "{{ target_hostname | default('all') }}"
+  gather_facts: true
+  become: true
+
+  vars:
+    # --- AAP の Survey から渡される変数 (rhel-update.yml と同じ) ---
+    target_os: all # all / rhel / sles / ubuntu (自分の OS 以外は何もしない)
+    update_mode: apply # apply: 更新を実行 / check: 確認のみ (何も変更しない)
+    update_scope: all # all: すべての更新 / security: セキュリティパッチのみ
+    update_packages: "" # 空: すべて / カンマ区切り: 指定パッケージのみ (update_scope=all のとき)
+    reboot_after_patch: true
+    reboot_timeout: 600
+    # --- 内部で使うリスト ---
+    update_package_list: "{{ update_packages.split(',') | map('trim') | select | list }}"
+    # zypper を使う OS (SLES, openSUSE) だけを対象にする
+    os_match: "{{ ansible_facts['pkg_mgr'] == 'zypper' and target_os in ['all', 'sles'] }}"
+
+  tasks:
+    - name: Report hosts skipped by this playbook
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: スキップ (pkg_mgr={{ ansible_facts['pkg_mgr'] | default('不明') }},
+          target_os={{ target_os }})。この Playbook は zypper を使う OS (SLES) 用です。
+      when: not os_match | bool
+
+    - name: End play for hosts not handled by this playbook
+      ansible.builtin.meta: end_host
+      when: not os_match | bool
+
+    - name: Validate options
+      ansible.builtin.assert:
+        that:
+          - update_scope in ['all', 'security']
+          - update_mode in ['apply', 'check']
+          # zypper のセキュリティ更新は「パッチ」単位のため、パッケージ名の絞り込みと併用できない
+          - not (update_scope == 'security' and update_package_list | length > 0)
+        fail_msg: >-
+          update_scope は all / security、update_mode は apply / check を指定してください。
+          SLES では update_scope=security と update_packages は同時に指定できません。
+
+    - name: Show plan
+      ansible.builtin.debug:
+        msg:
+          - "Host : {{ inventory_hostname }}"
+          - "モード : {{ update_mode }} / 更新範囲 : {{ update_scope }}"
+          - "対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+
+    # ==================================================
+    # 確認のみ (update_mode=check): 何も変更しない
+    # ==================================================
+    # patch-check の終了コード: 0=なし / 100=パッチあり / 101=セキュリティパッチあり
+    - name: Check for update (read only)
+      when: update_mode == 'check'
+      block:
+        - name: Check available patches
+          ansible.builtin.command: zypper --non-interactive -q patch-check
+          register: sles_patch_check
+          changed_when: false
+          failed_when: sles_patch_check.rc not in [0, 100, 101]
+
+        - name: List available package updates
+          ansible.builtin.command: zypper --non-interactive -q list-updates
+          register: sles_list_updates
+          changed_when: false
+          when: update_scope == 'all'
+
+        - name: List available security patches
+          ansible.builtin.command: zypper --non-interactive -q list-patches --category security
+          register: sles_list_security
+          changed_when: false
+          when: update_scope == 'security'
+
+        # CVE との対応: パッチ単位で表示する (zypper の表形式の行をそのまま表示)
+        - name: List unapplied CVEs
+          ansible.builtin.command: zypper --non-interactive -q list-patches --cve
+          register: sles_list_cve
+          changed_when: false
+          failed_when: false
+
+        # list-updates の行: "v | リポジトリ | 名前 | 現在の版 | 新しい版 | アーキテクチャ"
+        - name: Summarize
+          ansible.builtin.set_fact:
+            sles_updates: >-
+              {%- set ns = namespace(items=[]) -%}
+              {%- if update_scope == 'all' -%}
+              {%- for line in sles_list_updates.stdout_lines | default([]) | select('match', '^v\\s*\\|') -%}
+              {%- set f = line.split('|') | map('trim') | list -%}
+              {%- if f | length >= 6 and (update_package_list | length == 0 or f[2] in update_package_list) -%}
+              {%- set ns.items = ns.items + [f[2] ~ '.' ~ f[5] ~ ' ' ~ f[3] ~ ' -> ' ~ f[4] ~ ' (' ~ f[1] ~ ')'] -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {%- else -%}
+              {%- for line in sles_list_security.stdout_lines | default([]) | select('search', '\\|') | reject('search', 'Repository') -%}
+              {%- set ns.items = ns.items + [line | trim] -%}
+              {%- endfor -%}
+              {%- endif -%}
+              {{ ns.items }}
+            sles_cves: >-
+              {{ sles_list_cve.stdout_lines | default([])
+              | select('search', 'CVE-') | map('trim') | unique | list }}
+
+        - name: Show check result
+          ansible.builtin.debug:
+            msg:
+              - "Host : {{ inventory_hostname }}"
+              - "更新範囲 : {{ update_scope }}"
+              - "パッチの有無 (patch-check rc={{ sles_patch_check.rc }}): {{ {0: 'なし', 100: 'パッチあり', 101: 'セキュリティパッチあり'}[sles_patch_check.rc] }}"
+              - "更新 : {{ sles_updates | length }} 件"
+              - "{{ sles_updates }}"
+              - "未適用 CVE (パッチ単位) : {{ sles_cves | length }} 件"
+              - "{{ sles_cves }}"
+              - "{{ '※ CVE 情報の取得に失敗しました (rc=' ~ sles_list_cve.rc ~ ')' if sles_list_cve.rc != 0 else 'CVE 情報: 取得済み' }}"
+
+    # ==================================================
+    # 適用 (update_mode=apply)
+    # ==================================================
+    - name: Apply updates
+      when: update_mode == 'apply'
+      block:
+        # zypper の終了コード: 0=成功 / 102=要再起動 / 103=zypper 自身が更新された (再実行が必要)
+        - name: Apply security patches
+          ansible.builtin.command: >-
+            zypper --non-interactive patch --category security --auto-agree-with-licenses
+          register: sles_apply
+          changed_when: "'Nothing to do' not in sles_apply.stdout"
+          failed_when: sles_apply.rc not in [0, 102, 103]
+          when: update_scope == 'security'
+
+        - name: Apply package updates
+          ansible.builtin.command:
+            argv: >-
+              {{ ['zypper', '--non-interactive', 'update', '--auto-agree-with-licenses']
+              + update_package_list }}
+          register: sles_apply_all
+          changed_when: "'Nothing to do' not in sles_apply_all.stdout"
+          failed_when: sles_apply_all.rc not in [0, 102, 103]
+          when: update_scope == 'all'
+
+        - name: Warn when zypper itself was updated
+          ansible.builtin.debug:
+            msg: "zypper 自身が更新されました (rc=103)。残りのパッチを適用するため、もう一度実行してください。"
+          when: (sles_apply.rc | default(0)) == 103 or (sles_apply_all.rc | default(0)) == 103
+
+        # needs-rebooting の終了コード: 102=再起動が必要
+        - name: Check if reboot is required
+          ansible.builtin.command: zypper --non-interactive needs-rebooting
+          register: sles_reboot_check
+          changed_when: false
+          failed_when: false
+
+        - name: Show reboot requirement
+          ansible.builtin.debug:
+            msg:
+              - "Host : {{ inventory_hostname }}"
+              - "Reboot Required : {{ sles_reboot_check.rc == 102 }}"
+
+        - name: Reboot server
+          ansible.builtin.reboot:
+            reboot_timeout: "{{ reboot_timeout }}"
+            test_command: whoami
+            msg: "Reboot requested by Ansible SLES patch Playbook"
+          when:
+            - reboot_after_patch | bool
+            - sles_reboot_check.rc == 102

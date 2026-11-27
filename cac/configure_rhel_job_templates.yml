@@ -54,3 +54,36 @@
       loop: "{{ rhel_job_templates }}"
       loop_control:
         label: "{{ item.name }} ({{ item.playbook }})"
+
+    # OS 別のアップデートテンプレートを順に呼ぶワークフロー。
+    # 前のジョブの成否にかかわらず次へ進める (OS が違うホストは各テンプレートがスキップするため)
+    - name: Ensure update workflows exist
+      ansible.controller.workflow_job_template:
+        name: "{{ item.name }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ cac_organization }}"
+        inventory: "{{ item.inventory | default(cac_inventory) }}"
+        ask_limit_on_launch: true
+        survey_enabled: true
+        survey_spec: "{{ item.survey_spec }}"
+        workflow_nodes: >-
+          {%- set ns = namespace(nodes=[]) -%}
+          {%- for t in item.order -%}
+          {%- set node = {
+                'identifier': 'node' ~ loop.index,
+                'unified_job_template': {
+                  'name': t,
+                  'type': 'job_template',
+                  'organization': {'name': cac_organization}
+                },
+                'related': {
+                  'always_nodes': ([{'identifier': 'node' ~ (loop.index + 1)}] if not loop.last else [])
+                }
+              } -%}
+          {%- set ns.nodes = ns.nodes + [node] -%}
+          {%- endfor -%}
+          {{ ns.nodes }}
+        state: present
+      loop: "{{ update_workflows }}"
+      loop_control:
+        label: "{{ item.name }}"

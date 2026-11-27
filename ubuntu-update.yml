@@ -1,0 +1,136 @@
+---
+- name: Ubuntu Update and Reboot Playbook
+  hosts: "{{ target_hostname | default('all') }}"
+  gather_facts: true
+  become: true
+
+  vars:
+    # --- AAP の Survey から渡される変数 (rhel-update.yml と同じ) ---
+    target_os: all # all / rhel / sles / ubuntu (自分の OS 以外は何もしない)
+    update_mode: apply # apply: 更新を実行 / check: 確認のみ (何も変更しない)
+    update_scope: all # all: すべての更新 / security: セキュリティ更新のみ
+    update_packages: "" # 空: すべて / カンマ区切り: 指定パッケージのみ (* 使用可)
+    reboot_after_patch: true
+    reboot_timeout: 600
+    # --- 内部で使うリスト ---
+    update_package_list: "{{ update_packages.split(',') | map('trim') | select | list }}"
+    # パッケージ名のパターン (* を正規表現に変換)
+    update_package_regex: >-
+      {%- set parts = [] -%}
+      {%- for p in update_package_list -%}
+      {%- set _ = parts.append(p.split('*') | map('regex_escape') | join('.*')) -%}
+      {%- endfor -%}
+      ^({{ parts | join('|') }})$
+    # apt を使う OS (Ubuntu, Debian) だけを対象にする
+    os_match: "{{ ansible_facts['pkg_mgr'] == 'apt' and target_os in ['all', 'ubuntu'] }}"
+
+  tasks:
+    - name: Report hosts skipped by this playbook
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: スキップ (pkg_mgr={{ ansible_facts['pkg_mgr'] | default('不明') }},
+          target_os={{ target_os }})。この Playbook は apt を使う OS (Ubuntu) 用です。
+      when: not os_match | bool
+
+    - name: End play for hosts not handled by this playbook
+      ansible.builtin.meta: end_host
+      when: not os_match | bool
+
+    - name: Validate options
+      ansible.builtin.assert:
+        that:
+          - update_scope in ['all', 'security']
+          - update_mode in ['apply', 'check']
+        fail_msg: "update_scope は all / security、update_mode は apply / check を指定してください (現在: {{ update_scope }} / {{ update_mode }})"
+
+    - name: Show plan
+      ansible.builtin.debug:
+        msg:
+          - "Host : {{ inventory_hostname }}"
+          - "モード : {{ update_mode }} / 更新範囲 : {{ update_scope }}"
+          - "対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+
+    # パッケージ索引の更新 (apt-get update)。インストール済みパッケージは変更しない
+    - name: Refresh package index
+      ansible.builtin.apt:
+        update_cache: true
+
+    # apt-get -s は実際には何もしない (シミュレーション)。行の形式:
+    #   Inst 名前 [現在の版] (新しい版 提供元 [アーキテクチャ])
+    - name: Simulate upgrade (read only)
+      ansible.builtin.command: apt-get -s -qq dist-upgrade # noqa: command-instead-of-module
+      register: apt_sim
+      changed_when: false
+
+    - name: Build update list
+      ansible.builtin.set_fact:
+        apt_updates: >-
+          {%- set ns = namespace(items=[]) -%}
+          {%- for line in apt_sim.stdout_lines | select('match', '^Inst ') -%}
+          {%- set m = line | regex_search('^Inst (\\S+)(?: \\[([^\\]]+)\\])? \\((\\S+) ([^)]*)\\)', '\\1', '\\2', '\\3', '\\4') -%}
+          {%- if m %}
+          {%- set is_sec = '-security' in line -%}
+          {%- if (update_scope == 'all' or is_sec)
+                 and (update_package_list | length == 0 or m[0] is match(update_package_regex)) -%}
+          {%- set label = m[0] ~ ' ' ~ (m[1] | default('(新規)', true)) ~ ' -> ' ~ m[2] ~ (' [security]' if is_sec else '') -%}
+          {%- set ns.items = ns.items + [{'name': m[0], 'security': is_sec, 'line': label}] -%}
+          {%- endif -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ ns.items }}
+
+    # ==================================================
+    # 確認のみ (update_mode=check)
+    # ==================================================
+    - name: Show check result
+      ansible.builtin.debug:
+        msg:
+          - "Host : {{ inventory_hostname }}"
+          - "更新範囲 : {{ update_scope }} / 対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
+          - "更新 : {{ apt_updates | length }} 件あり (うちセキュリティ: {{ apt_updates | selectattr('security') | list | length }} 件)"
+          - "{{ apt_updates | map(attribute='line') | list }}"
+          - "CVE との対応 : Ubuntu は標準では取得できません (Ubuntu Pro の `pro security-status` などが必要)"
+      when: update_mode == 'check'
+
+    # ==================================================
+    # 適用 (update_mode=apply)
+    # ==================================================
+    - name: Apply updates
+      when: update_mode == 'apply'
+      block:
+        - name: Upgrade all packages
+          ansible.builtin.apt:
+            upgrade: dist
+          when:
+            - update_scope == 'all'
+            - update_package_list | length == 0
+
+        - name: Upgrade selected packages (security only or specified packages)
+          ansible.builtin.apt:
+            name: "{{ apt_updates | map(attribute='name') | list }}"
+            state: latest
+            only_upgrade: true
+          when:
+            - update_scope == 'security' or update_package_list | length > 0
+            - apt_updates | length > 0
+
+        # Ubuntu は更新後に /var/run/reboot-required が作られる
+        - name: Check if reboot is required
+          ansible.builtin.stat:
+            path: /var/run/reboot-required
+          register: ubuntu_reboot_required
+
+        - name: Show reboot requirement
+          ansible.builtin.debug:
+            msg:
+              - "Host : {{ inventory_hostname }}"
+              - "Reboot Required : {{ ubuntu_reboot_required.stat.exists }}"
+
+        - name: Reboot server
+          ansible.builtin.reboot:
+            reboot_timeout: "{{ reboot_timeout }}"
+            test_command: whoami
+            msg: "Reboot requested by Ansible Ubuntu patch Playbook"
+          when:
+            - reboot_after_patch | bool
+            - ubuntu_reboot_required.stat.exists

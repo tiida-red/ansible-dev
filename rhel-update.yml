@@ -7,14 +7,28 @@
     region: "ap-northeast-1"
     reboot_after_patch: true # OSパッチ適用後に再起動するか
     # --- AAP の Survey から渡される変数 ---
+    target_os: all # all / rhel / sles / ubuntu (ワークフローから渡される。自分の OS 以外は何もしない)
     update_mode: apply # apply: 更新を実行 / check: 更新の有無を確認するだけ (何も変更しない)
     update_scope: all # all: すべての更新 / security: セキュリティ更新のみ
     update_packages: "" # 空: すべて / カンマ区切りで指定: 指定パッケージのみ (例: "kernel,openssl")
     # --- 内部で使うリスト ---
     update_package_list: "{{ update_packages.split(',') | map('trim') | select | list }}"
     reboot_timeout: 600
+    # dnf を使う OS (RHEL, Rocky, Alma, Amazon Linux 2023 など) だけを対象にする
+    os_match: "{{ ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and target_os in ['all', 'rhel'] }}"
 
   tasks:
+    - name: Report hosts skipped by this playbook
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: スキップ (pkg_mgr={{ ansible_facts['pkg_mgr'] | default('不明') }},
+          target_os={{ target_os }})。この Playbook は dnf を使う OS 用です。
+      when: not os_match | bool
+
+    - name: End play for hosts not handled by this playbook
+      ansible.builtin.meta: end_host
+      when: not os_match | bool
+
     - name: inventoryで登録されているホスト一覧を取得
       ansible.builtin.debug:
         msg: "対象ホスト: {{ inventory_hostname }} のパッケージを{{ '最新に更新します' if update_mode == 'apply' else '確認します (更新はしません)' }}"
@@ -100,7 +114,10 @@
           - "更新範囲 : {{ update_scope }} / 対象パッケージ : {{ update_package_list if update_package_list | length > 0 else '(すべて)' }}"
           - "更新 : {{ available_updates | length }} 件あり (うち CVE 未適用あり: {{ updates_with_cve }} 件)"
           - "{{ update_report }}"
-          - "{{ '※ CVE 情報の取得に失敗しました (rc=' ~ cve_updateinfo.rc ~ '): ' ~ cve_updateinfo.stderr | default('') ~ ' → CVE 欄の - は「なし」ではなく「不明」です' if cve_updateinfo.rc != 0 else 'CVE 情報: 取得済み (CVE 欄の - は未適用 CVE なし)' }}"
+          - >-
+            {{ '※ CVE 情報の取得に失敗しました (rc=' ~ cve_updateinfo.rc ~ '): ' ~ cve_updateinfo.stderr | default('')
+            ~ ' → CVE 欄の - は「なし」ではなく「不明」です'
+            if cve_updateinfo.rc != 0 else 'CVE 情報: 取得済み (CVE 欄の - は未適用 CVE なし)' }}
       when: update_mode == 'check'
 
     # update_scope=security なら security: true、update_packages 指定ありならその名前だけを対象にする
