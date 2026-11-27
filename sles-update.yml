@@ -113,6 +113,41 @@
               - "{{ sles_cves }}"
               - "{{ '※ CVE 情報の取得に失敗しました (rc=' ~ sles_list_cve.rc ~ ')' if sles_list_cve.rc != 0 else 'CVE 情報: 取得済み' }}"
 
+    # --- レポート用データ (ワークフローの後続ジョブ update-report.yml に set_stats で引き継ぐ) ---
+    # list-patches --cve の行: "cve | CVE-xxxx | パッチ名 | カテゴリ | 重要度 | ..."
+    - name: Build report entry for this host
+      ansible.builtin.set_fact:
+        report_entry:
+          host: "{{ inventory_hostname }}"
+          distro: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          scope: "{{ update_scope }}"
+          updates: "{{ sles_updates }}"
+          cves: >-
+            {%- set ns = namespace(lines=[]) -%}
+            {%- for line in sles_cves -%}
+            {%- set f = line.split('|') | map('trim') | list -%}
+            {%- if f | length >= 5 -%}
+            {%- set ns.lines = ns.lines + [f[1] ~ ' (' ~ f[4] ~ ') ' ~ f[2]] -%}
+            {%- endif -%}
+            {%- endfor -%}
+            {{ ns.lines | unique | sort | list }}
+          cve_count: >-
+            {%- set ns = namespace(ids=[]) -%}
+            {%- for line in sles_cves -%}
+            {%- set f = line.split('|') | map('trim') | list -%}
+            {%- if f | length >= 2 -%}{%- set ns.ids = ns.ids + [f[1]] -%}{%- endif -%}
+            {%- endfor -%}
+            {{ ns.ids | unique | list | length }}
+          cve_note: "{{ '' if sles_list_cve.rc == 0 else 'CVE 情報の取得に失敗しました (rc=' ~ sles_list_cve.rc ~ ')' }}"
+      when: update_mode == 'check'
+
+    - name: Publish report data to the workflow
+      ansible.builtin.set_stats:
+        data:
+          check_report_sles: "{{ ansible_play_hosts_all | map('extract', hostvars, 'report_entry') | select('defined') | list }}"
+      run_once: true # noqa: run-once[task]
+      when: update_mode == 'check'
+
     # ==================================================
     # 適用 (update_mode=apply)
     # ==================================================

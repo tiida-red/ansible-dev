@@ -1,0 +1,68 @@
+{#- GitHub 上で表・ページ内リンク・折りたたみがそのまま表示される Markdown。ホスト名のアンカーは GitHub の見出し ID の規則に合わせる -#}
+{%- macro slug(name) -%}{{ name | lower | regex_replace('[^a-z0-9 _-]', '') | replace(' ', '-') }}{%- endmacro -%}
+# アップデート確認レポート
+
+- 実行日時: {{ generated_at }}
+- 更新範囲: {{ entries | map(attribute='scope') | unique | join(', ') }}
+- 対象ホスト数: {{ entries | length }}
+- 実行元: AAP ワークフロー (確認のみ。システムは変更していません)
+
+## サマリー
+
+| ホスト | OS | 更新件数 | CVE 件数 | 詳細 |
+|---|---|---:|---:|---|
+{% for e in entries %}
+| {{ e.host }} | {{ e.distro }} | {{ e.updates | length }} | {{ e.cve_count }} | [詳細](#{{ slug(e.host) }}) |
+{% endfor %}
+| **合計** | | **{{ entries | sum(attribute='updates', start=[]) | length }}** | **{{ entries | map(attribute='cve_count') | map('int') | sum }}** | |
+
+{% set pending = entries | selectattr('updates') | list %}
+{% if pending | length > 0 %}
+更新が必要なホスト: {{ pending | map(attribute='host') | join(', ') }}
+{% else %}
+更新が必要なホストはありません。
+{% endif %}
+
+## 詳細
+
+{% for e in entries %}
+### {{ e.host }}
+
+- OS: {{ e.distro }}
+- 更新範囲: {{ e.scope }}
+{% if e.cve_note %}
+- 注記: {{ e.cve_note }}
+{% endif %}
+
+**更新 ({{ e.updates | length }} 件)**
+
+{% if e.updates | length > 0 %}
+```
+{% for u in e.updates %}
+{{ u }}
+{% endfor %}
+```
+{% else %}
+なし
+{% endif %}
+
+**未適用 CVE ({{ e.cve_count }} 件)**
+
+{% if e.cves | length > 0 %}
+<details>
+<summary>CVE の一覧を表示 ({{ e.cves | length }} 行)</summary>
+
+```
+{% for c in e.cves %}
+{{ c }}
+{% endfor %}
+```
+
+</details>
+{% else %}
+なし
+{% endif %}
+
+[↑ サマリーに戻る](#サマリー)
+
+{% endfor %}

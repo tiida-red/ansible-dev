@@ -30,6 +30,26 @@
         state: present
       when: cac_manage_project | bool
 
+    # レポートを Git に push するためのトークンを AAP の認証情報として扱うための「種類」。
+    # トークンそのものは、AAP の画面でこの種類の認証情報を作って入力する (リポジトリには置かない)
+    - name: Ensure the report token credential type exists
+      ansible.controller.credential_type:
+        name: Report Git Token
+        description: update-report.yml が Git に push するためのトークン (環境変数 REPORT_GIT_TOKEN として注入)
+        kind: cloud
+        inputs:
+          fields:
+            - id: token
+              type: string
+              label: Git Token
+              secret: true
+          required:
+            - token
+        injectors:
+          env:
+            REPORT_GIT_TOKEN: !unsafe "{{ token }}"
+        state: present
+
     - name: Ensure RHEL job templates exist
       ansible.controller.job_template:
         name: "{{ item.name }}"
@@ -38,8 +58,7 @@
         project: "{{ cac_project }}"
         playbook: "{{ item.playbook }}"
         inventory: "{{ item.inventory | default(cac_inventory) }}"
-        credentials:
-          - "{{ cac_machine_credential }}"
+        credentials: "{{ [cac_machine_credential] + (item.extra_credentials | default([]) | select | list) }}"
         execution_environment: "{{ cac_execution_environment | default(omit, true) }}"
         job_type: "{{ item.job_type | default('run') }}"
         become_enabled: "{{ item.become_enabled | default(false) }}"
@@ -47,7 +66,7 @@
         timeout: "{{ item.timeout | default(omit) }}"
         extra_vars: "{{ item.extra_vars | default(omit) }}"
         ask_variables_on_launch: "{{ item.ask_variables_on_launch | default(false) }}"
-        ask_limit_on_launch: true
+        ask_limit_on_launch: "{{ item.ask_limit_on_launch | default(true) }}"
         survey_enabled: "{{ item.survey_enabled | default(false) }}"
         survey_spec: "{{ item.survey_spec | default(omit) }}"
         state: present

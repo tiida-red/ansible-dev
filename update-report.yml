@@ -1,0 +1,142 @@
+---
+# 確認モードの結果 (set_stats で引き継がれたデータ) を Markdown レポートにして、Git リポジトリに push する。
+# ワークフロー "Update - All distributions" の最後のノードとして実行する。
+#
+# 注意: レポートにはホスト名や CVE の未適用状況が含まれる。必ず「非公開」リポジトリを指定すること。
+# 認証: 環境変数 REPORT_GIT_TOKEN (AAP のカスタム認証情報で注入) か、変数 report_git_token にトークンを渡す。
+- name: Publish update check report to Git
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    report_git_repo: "" # 例: https://github.com/<org>/<非公開リポジトリ>.git (必須)
+    report_git_branch: main
+    report_git_dir: reports
+    report_git_token: "{{ lookup('ansible.builtin.env', 'REPORT_GIT_TOKEN') }}"
+    report_git_user_name: Ansible Report
+    report_git_user_email: ansible-report@example.invalid
+    # ワークフローの前段ジョブから引き継がれるデータ
+    check_report_rhel: []
+    check_report_sles: []
+    check_report_ubuntu: []
+    report_entries: "{{ (check_report_rhel + check_report_sles + check_report_ubuntu) | sort(attribute='host') }}"
+
+  tasks:
+    - name: Skip when there is no check data
+      ansible.builtin.debug:
+        msg: >-
+          レポート対象のデータがありません。ワークフローの実行モードを check にしたか、
+          対象ホストがあるかを確認してください。
+      when: report_entries | length == 0
+
+    - name: End play when there is no check data
+      ansible.builtin.meta: end_play
+      when: report_entries | length == 0
+
+    - name: Validate repository settings
+      ansible.builtin.assert:
+        that:
+          - report_git_repo | length > 0
+          - report_git_repo.startswith('https://') or report_git_repo.startswith('file://')
+        fail_msg: >-
+          report_git_repo に、レポート用の「非公開」リポジトリの HTTPS URL を指定してください
+          (トークンは URL に含めず、REPORT_GIT_TOKEN で渡します)。
+      run_once: true # noqa: run-once[task]
+
+    - name: Prepare working directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: update-report
+      register: work
+
+    - name: Publish the report
+      block:
+        - name: Set report names
+          ansible.builtin.set_fact:
+            generated_at: "{{ now(fmt='%Y-%m-%d %H:%M:%S') }}"
+            report_file: "update-check-{{ now(fmt='%Y%m%d-%H%M%S') }}.md"
+            # https:// の URL にだけトークンを埋め込む (ログには出さない)
+            auth_repo: >-
+              {{ report_git_repo | regex_replace('^https://', 'https://x-access-token:' ~ report_git_token ~ '@')
+              if report_git_token | length > 0 and report_git_repo.startswith('https://') else report_git_repo }}
+          no_log: true
+
+        - name: Clone the report repository
+          ansible.builtin.command:
+            argv: ["git", "clone", "--depth", "1", "--branch", "{{ report_git_branch }}", "{{ auth_repo }}", "{{ work.path }}/repo"]
+          environment:
+            GIT_TERMINAL_PROMPT: "0"
+          changed_when: true
+          no_log: true # URL にトークンが含まれるため。失敗時は rescue で確認項目を表示する
+
+        - name: Create report directory
+          ansible.builtin.file:
+            path: "{{ work.path }}/repo/{{ report_git_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Render the report
+          ansible.builtin.template:
+            src: update_report.md.j2
+            dest: "{{ work.path }}/repo/{{ report_git_dir }}/{{ report_file }}"
+            mode: "0644"
+          vars:
+            entries: "{{ report_entries }}"
+
+        - name: Update latest.md
+          ansible.builtin.copy:
+            src: "{{ work.path }}/repo/{{ report_git_dir }}/{{ report_file }}"
+            dest: "{{ work.path }}/repo/{{ report_git_dir }}/latest.md"
+            remote_src: true
+            mode: "0644"
+
+        - name: Stage the report
+          ansible.builtin.command:
+            argv: ["git", "add", "--", "{{ report_git_dir }}"]
+            chdir: "{{ work.path }}/repo"
+          changed_when: true
+
+        - name: Commit the report
+          ansible.builtin.command:
+            argv:
+              - git
+              - -c
+              - "user.name={{ report_git_user_name }}"
+              - -c
+              - "user.email={{ report_git_user_email }}"
+              - commit
+              - -q
+              - -m
+              - "Add update check report {{ report_file }}"
+            chdir: "{{ work.path }}/repo"
+          changed_when: true
+
+        - name: Push the report
+          ansible.builtin.command:
+            argv: ["git", "push", "origin", "{{ report_git_branch }}"]
+            chdir: "{{ work.path }}/repo"
+          environment:
+            GIT_TERMINAL_PROMPT: "0"
+          changed_when: true
+          no_log: true
+
+        - name: Show report location
+          ansible.builtin.debug:
+            msg:
+              - "レポートを push しました: {{ report_file }}"
+              - "最新: {{ report_git_repo | regex_replace('\\.git$', '') }}/blob/{{ report_git_branch }}/{{ report_git_dir }}/latest.md"
+              - "今回: {{ report_git_repo | regex_replace('\\.git$', '') }}/blob/{{ report_git_branch }}/{{ report_git_dir }}/{{ report_file }}"
+
+      rescue:
+        - name: Report failure
+          ansible.builtin.fail:
+            msg: >-
+              レポートの作成または push に失敗しました。リポジトリ URL・ブランチ・トークンの権限
+              (Contents: Read and write)・リポジトリが存在することを確認してください。
+
+      always:
+        - name: Remove working directory
+          ansible.builtin.file:
+            path: "{{ work.path }}"
+            state: absent

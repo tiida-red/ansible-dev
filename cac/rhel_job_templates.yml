@@ -16,6 +16,12 @@ cac_inventory: my inventory
 cac_machine_credential: RHEL
 cac_execution_environment: ""  # 空の場合は組織/既定の EE を使用
 
+# --- チェック結果レポート (Markdown を Git に push する) ---
+# 非公開のリポジトリを指定すること (レポートにはホスト名や CVE の状況が含まれる)
+cac_report_git_repo: "https://github.com/tiida-red/ansible-update-reports.git"  # 例: https://github.com/<org>/<非公開リポジトリ>.git
+# Git のトークンを入れた AAP の認証情報 (種類: Report Git Token) の名前。AAP の画面で作成する
+cac_report_credential: ""
+
 # --- OS 別アップデート用ジョブテンプレートとワークフローで共通の Survey ---
 update_survey: &update_survey
   name: Update options
@@ -69,13 +75,14 @@ update_survey: &update_survey
 # --- ワークフロー: 3 つの OS 別テンプレートを順に実行する (自分の OS 以外のホストは各テンプレートがスキップ) ---
 update_workflows:
   - name: Update - All distributions
-    description: RHEL 系 → SLES → Ubuntu の順に更新を実行/確認する。Survey の「対象 OS」で OS を選べる
+    description: RHEL 系 → SLES → Ubuntu の順に更新を実行/確認し、確認モードなら最後にレポートを Git に push する。Survey の「対象 OS」で OS を選べる
     survey_spec: *update_survey
     # 実行順 (前のジョブが失敗しても次へ進む)
     order:
       - RHEL - Update and Reboot
       - SLES - Update and Reboot
       - Ubuntu - Update and Reboot
+      - Update - Publish Check Report
 
 rhel_job_templates:
   - name: RHEL - Register Subscription
@@ -181,6 +188,19 @@ rhel_job_templates:
     survey_enabled: true
     survey_spec: *update_survey
     timeout: 3600
+
+  - name: Update - Publish Check Report
+    playbook: update-report.yml
+    description: 確認モードの結果を Markdown のレポートにして Git に push する (ワークフローの最後のノード)
+    become_enabled: false
+    # 前段のジョブから引き継ぐデータ (set_stats) を受け取るために必要
+    ask_variables_on_launch: true
+    # ワークフローの Limit を受け取らない (localhost で実行するため)
+    ask_limit_on_launch: false
+    extra_vars:
+      report_git_repo: "{{ cac_report_git_repo }}"
+    extra_credentials:
+      - "{{ cac_report_credential }}"
 
   - name: RHEL - Package Search
     playbook: rhel-package-search.yml

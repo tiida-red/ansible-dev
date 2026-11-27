@@ -120,6 +120,31 @@
             if cve_updateinfo.rc != 0 else 'CVE 情報: 取得済み (CVE 欄の - は未適用 CVE なし)' }}
       when: update_mode == 'check'
 
+    # --- レポート用データ (ワークフローの後続ジョブ update-report.yml に set_stats で引き継ぐ) ---
+    - name: Build report entry for this host
+      ansible.builtin.set_fact:
+        report_entry:
+          host: "{{ inventory_hostname }}"
+          distro: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          scope: "{{ update_scope }}"
+          updates: "{{ update_report }}"
+          cves: >-
+            {%- set ns = namespace(lines=[]) -%}
+            {%- for e in cve_entries -%}
+            {%- set ns.lines = ns.lines + [e.cve ~ ' (' ~ e.severity ~ ') ' ~ e.package] -%}
+            {%- endfor -%}
+            {{ ns.lines | unique | sort | list }}
+          cve_count: "{{ cve_entries | map(attribute='cve') | unique | list | length }}"
+          cve_note: "{{ '' if cve_updateinfo.rc == 0 else 'CVE 情報の取得に失敗しました (rc=' ~ cve_updateinfo.rc ~ ')' }}"
+      when: update_mode == 'check'
+
+    - name: Publish report data to the workflow
+      ansible.builtin.set_stats:
+        data:
+          check_report_rhel: "{{ ansible_play_hosts_all | map('extract', hostvars, 'report_entry') | select('defined') | list }}"
+      run_once: true # noqa: run-once[task]
+      when: update_mode == 'check'
+
     # update_scope=security なら security: true、update_packages 指定ありならその名前だけを対象にする
     - name: パッケージを最新化 (OSパッチ適用)
       ansible.builtin.dnf:
